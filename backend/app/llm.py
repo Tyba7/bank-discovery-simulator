@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 
 import litellm
 from pydantic import BaseModel, ValidationError
@@ -17,6 +18,18 @@ _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 class LLMOutputError(RuntimeError):
     pass
+
+
+def _extract_json(text: str) -> str:
+    # Drop code fences, then decode the first JSON object and ignore any text around it.
+    text = _FENCE.sub("", text.strip())
+    start = text.find("{")
+    if start == -1:
+        return text
+    try:
+        return json.dumps(json.JSONDecoder().raw_decode(text, start)[0])
+    except json.JSONDecodeError:
+        return text
 
 
 def _with_schema_instruction(messages: list[dict], schema_json: dict) -> list[dict]:
@@ -45,7 +58,9 @@ class LLM:
         }
 
     def _complete(self, messages: list[dict], temperature: float, max_tokens: int, **extra) -> str:
+        start = time.perf_counter()
         choice = litellm.completion(messages=messages, **extra, **self._params(temperature, max_tokens)).choices[0]
+        log.info("llm %s %.2fs finish=%s", self.s.llm_model, time.perf_counter() - start, choice.finish_reason)
         if choice.finish_reason == "length":
             log.warning("LLM-002 reply truncated at max_tokens=%s", max_tokens)
         return choice.message.content or ""
@@ -81,7 +96,7 @@ class LLM:
 
         text = self._complete(messages, temperature, max_tokens, **extra)
         try:
-            return schema.model_validate_json(_FENCE.sub("", text.strip()))
+            return schema.model_validate_json(_extract_json(text))
         except ValidationError as e:
             log.warning("LLM-003 invalid structured output (%s mode), repairing once", mode)
             repair = [
@@ -91,6 +106,6 @@ class LLM:
             ]
             text = self._complete(repair, temperature, max_tokens, **extra)
             try:
-                return schema.model_validate_json(_FENCE.sub("", text.strip()))
+                return schema.model_validate_json(_extract_json(text))
             except ValidationError as e2:
                 raise LLMOutputError(f"{schema.__name__}: model output invalid after repair") from e2

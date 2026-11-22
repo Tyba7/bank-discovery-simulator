@@ -26,7 +26,7 @@
       "id": "existing_lease",
       "category": "commitments",
       "tags": ["existing_debt"],
-      "topic": "current debts, loans, leases, or other financial commitments",
+      "topic": "current debts, loans, leases, or other borrowing the business is still repaying",
       "fact": "He still owes QAR 180,000 on an Ijara (an Islamic lease) for equipment at the second café, with 18 months left."
     }
   ]

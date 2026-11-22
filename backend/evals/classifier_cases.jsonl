@@ -19,7 +19,7 @@
 {"id": "k-season-09", "client": "khalid_al_mansouri", "slice": "positive_paraphrase", "question": "Have you ever struggled to pay suppliers on time?", "unlocks": ["seasonal_cash_flow"], "on_topic": true, "question_type": "closed"}
 {"id": "k-season-10", "client": "khalid_al_mansouri", "slice": "positive_paraphrase", "question": "How do the cafés do during the hot months?", "unlocks": ["seasonal_cash_flow"], "on_topic": true, "question_type": "open"}
 {"id": "k-lease-01", "client": "khalid_al_mansouri", "slice": "positive", "question": "Do you currently have any loans or leases?", "unlocks": ["existing_lease"], "on_topic": true, "question_type": "closed"}
-{"id": "k-lease-02", "client": "khalid_al_mansouri", "slice": "positive", "question": "What other financial commitments does the business have right now?", "unlocks": ["existing_lease"], "on_topic": true, "question_type": "open"}
+{"id": "k-lease-02", "client": "khalid_al_mansouri", "slice": "positive", "question": "What borrowing is the business still repaying?", "unlocks": ["existing_lease"], "on_topic": true, "question_type": "open"}
 {"id": "k-lease-03", "client": "khalid_al_mansouri", "slice": "positive", "question": "Do you have any outstanding debts?", "unlocks": ["existing_lease"], "on_topic": true, "question_type": "closed"}
 {"id": "k-lease-04", "client": "khalid_al_mansouri", "slice": "positive", "question": "Are you paying off any leases at the moment?", "unlocks": ["existing_lease"], "on_topic": true, "question_type": "closed"}
 {"id": "k-lease-05", "client": "khalid_al_mansouri", "slice": "positive", "question": "What loans does the business already have?", "unlocks": ["existing_lease"], "on_topic": true, "question_type": "open"}
