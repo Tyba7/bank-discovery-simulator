@@ -1,0 +1,33 @@
+{
+  "id": "khalid_al_mansouri",
+  "name": "Khalid Al-Mansouri",
+  "age": 42,
+  "occupation": "Owner of two cafés in Doha",
+  "background": "Qatari business owner. Opened his first café eight years ago and a second three years ago. Married with three children.",
+  "stated_goal": "Wants to talk about financing to open a third café.",
+  "personality": "Friendly and confident but busy. Gives short answers and goes into detail only when asked a direct, specific question. Proud of his business and reluctant to admit problems.",
+  "hidden_needs": [
+    {
+      "id": "sharia_compliance",
+      "topic": "religious or ethical preferences about banking, interest, or Islamic / Sharia-compliant products",
+      "fact": "He will only use Sharia-compliant products and refuses anything that charges interest.",
+      "suitable_products": ["murabaha_business_finance", "islamic_savings_account"]
+    },
+    {
+      "id": "seasonal_cash_flow",
+      "topic": "business revenue, cash flow, seasonality, or how income changes during the year",
+      "fact": "Revenue drops about 40% from June to August when many residents travel. Last summer he paid two suppliers late.",
+      "suitable_products": ["murabaha_business_finance", "islamic_savings_account"]
+    },
+    {
+      "id": "existing_lease",
+      "topic": "current debts, loans, leases, or other financial commitments",
+      "fact": "He still owes QAR 180,000 on an equipment lease for the second café, with 18 months left.",
+      "suitable_products": []
+    }
+  ],
+  "unsuitable_products": [
+    {"product_id": "business_overdraft", "reason": "Charges interest, which conflicts with his Sharia-compliance requirement."},
+    {"product_id": "equity_growth_fund", "reason": "Not Sharia-screened, and ties up cash he needs for the summer dip and the lease."}
+  ]
+}
