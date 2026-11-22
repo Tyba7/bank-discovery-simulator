@@ -1,5 +1,3 @@
-"""Smoke test: can we reach the configured model, in plain text and in structured JSON?"""
-
 import time
 
 from pydantic import BaseModel

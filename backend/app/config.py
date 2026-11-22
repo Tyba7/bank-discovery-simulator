@@ -1,5 +1,3 @@
-"""Settings from environment variables (.env in development)."""
-
 import json
 import os
 from dataclasses import dataclass
