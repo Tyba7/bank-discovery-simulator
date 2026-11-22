@@ -1,0 +1,26 @@
+[project]
+name = "bank-discovery-simulator"
+version = "0.1.0"
+description = "AI client interview simulator with AI coaching feedback"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.163.1",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.3",
+    "python-dotenv==1.2.4",
+    "litellm==1.108.3",
+    "langgraph==1.2.20",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.4",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["llm: tests that call a real model"]
