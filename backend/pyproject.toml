@@ -23,4 +23,5 @@ line-length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["llm: tests that call a real model"]
