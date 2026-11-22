@@ -1,0 +1,98 @@
+[
+  {
+    "id": "murabaha_business_finance",
+    "name": "Murabaha Business Finance",
+    "category": "business financing",
+    "sharia_compliant": true,
+    "features": [
+      "The bank buys equipment or fit-out and sells it to the business at an agreed profit",
+      "Total cost is fixed and known from day one",
+      "Terms from 1 to 5 years",
+      "Instalments can be set lower during a known slow season"
+    ],
+    "limitations": [
+      "Finances specific assets only, not general cash",
+      "Business must have been trading for at least 2 years",
+      "Existing finance commitments reduce the maximum amount"
+    ]
+  },
+  {
+    "id": "business_overdraft",
+    "name": "Business Overdraft",
+    "category": "business financing",
+    "sharia_compliant": false,
+    "features": [
+      "Draw cash any time up to an agreed limit",
+      "Pay only for the amount used",
+      "Useful for short-term cash gaps"
+    ],
+    "limitations": [
+      "Interest of 9% a year on the amount used",
+      "Not Sharia-compliant",
+      "Limit is reviewed every 12 months and can be withdrawn"
+    ]
+  },
+  {
+    "id": "islamic_savings_account",
+    "name": "Islamic Savings Account (Mudaraba)",
+    "category": "savings",
+    "sharia_compliant": true,
+    "features": [
+      "Profit share paid monthly instead of interest",
+      "Withdraw any time",
+      "No minimum balance"
+    ],
+    "limitations": [
+      "Profit rate is expected, not guaranteed",
+      "Lower expected return than fixed-term products"
+    ]
+  },
+  {
+    "id": "education_savings_plan",
+    "name": "Education Savings Plan",
+    "category": "savings",
+    "sharia_compliant": false,
+    "features": [
+      "Fixed monthly deposit from QAR 500",
+      "Guaranteed return of 3.5% a year",
+      "Capital protected",
+      "Matures on a chosen date to pay school or university fees"
+    ],
+    "limitations": [
+      "Early withdrawal loses the guaranteed return",
+      "Monthly deposit is fixed for the whole term",
+      "Not Sharia-compliant"
+    ]
+  },
+  {
+    "id": "equity_growth_fund",
+    "name": "Equity Growth Fund",
+    "category": "investment",
+    "sharia_compliant": false,
+    "features": [
+      "Invests in global company shares",
+      "Higher potential long-term return",
+      "Minimum investment QAR 5,000"
+    ],
+    "limitations": [
+      "Value can fall; capital is at risk",
+      "Recommended only for 7 years or more",
+      "Not Sharia-screened"
+    ]
+  },
+  {
+    "id": "global_transfer_account",
+    "name": "Global Transfer Account",
+    "category": "everyday banking",
+    "sharia_compliant": true,
+    "features": [
+      "First 2 international transfers each month are free",
+      "Fixed fee of QAR 10 per transfer after that",
+      "Same-day transfers to the Philippines, India, Egypt and Pakistan"
+    ],
+    "limitations": [
+      "Maximum QAR 20,000 sent per month",
+      "No interest or profit paid on the balance"
+    ]
+  }
+]
