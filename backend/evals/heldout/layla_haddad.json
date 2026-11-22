@@ -1,0 +1,33 @@
+{
+  "id": "layla_haddad",
+  "name": "Layla Haddad",
+  "age": 29,
+  "occupation": "Freelance graphic designer in Doha",
+  "background": "Lebanese expatriate, four years in Qatar. Works on contract for several design agencies.",
+  "stated_goal": "Wants to put some money aside.",
+  "personality": "Chatty and enthusiastic about her design work, but uncomfortable talking about money. Changes the subject unless asked directly.",
+  "tags": ["self_employed"],
+  "hidden_needs": [
+    {
+      "id": "irregular_income",
+      "category": "financial_situation",
+      "tags": ["irregular_income"],
+      "topic": "how much she earns, how regular her income is, or months with little work",
+      "fact": "Her income varies between QAR 4,000 and QAR 15,000 a month, and some months she has almost no work."
+    },
+    {
+      "id": "wedding_savings",
+      "category": "objectives",
+      "tags": ["short_term_goal"],
+      "topic": "what the money is for, upcoming life events, or plans for the next two years",
+      "fact": "She is getting married in 18 months and needs QAR 40,000 saved by then."
+    },
+    {
+      "id": "no_investment_experience",
+      "category": "knowledge_experience",
+      "tags": ["no_investment_experience"],
+      "topic": "which financial products she has used, or how well she understands investing",
+      "fact": "She has only ever had a current account and does not understand how investment funds work."
+    }
+  ]
+}

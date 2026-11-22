@@ -1,0 +1,16 @@
+[
+  {"id": "R01", "when_need": "requires_sharia", "product_lacks": "sharia_compliant", "verdict": "unsuitable", "reason": "Not Sharia-compliant, and the client accepts only Sharia-compliant products."},
+  {"id": "R02", "when_need": "no_capital_risk", "product_has": "capital_at_risk", "verdict": "unsuitable", "reason": "The value can fall, and the client wants no risk to their savings."},
+  {"id": "R03", "when_need": "no_investment_experience", "product_has": "capital_at_risk", "verdict": "unsuitable", "reason": "An investment whose value can fall, for a client who has never invested."},
+  {"id": "R04", "when_need": "short_term_goal", "product_has": "long_horizon", "verdict": "unsuitable", "reason": "Meant to be held for 7 years or more, but the client needs the money sooner."},
+  {"id": "R05", "when_need": "irregular_income", "product_has": "fixed_monthly_deposit", "verdict": "unsuitable", "reason": "Fixed monthly deposits do not fit an income that changes from month to month."},
+  {"id": "R06", "unless_client": "business_owner", "product_has": "business_only", "verdict": "unsuitable", "reason": "Only for businesses, and the client has no business."},
+  {"id": "R07", "when_need": "seasonal_revenue", "product_has": "seasonal_instalments", "verdict": "suitable", "reason": "Instalments can be lowered during the slow season."},
+  {"id": "R08", "when_need": "seasonal_revenue", "product_has": "flexible_access", "verdict": "suitable", "reason": "A flexible reserve to draw on during slow months."},
+  {"id": "R09", "when_need": "irregular_income", "product_has": "flexible_access", "verdict": "suitable", "reason": "Money can be paid in and taken out any time, which fits an irregular income."},
+  {"id": "R10", "when_need": "short_term_goal", "product_has": "flexible_access", "verdict": "suitable", "reason": "The money is available when the goal arrives."},
+  {"id": "R11", "when_need": "education_goal", "product_has": "education_purpose", "verdict": "suitable", "reason": "Built to pay school or university fees on a chosen date."},
+  {"id": "R12", "when_need": "no_capital_risk", "product_has": "capital_protected", "verdict": "suitable", "reason": "The amount paid in cannot fall."},
+  {"id": "R13", "when_need": "sends_money_abroad", "product_has": "international_transfers", "verdict": "suitable", "reason": "Makes regular transfers abroad cheaper."},
+  {"id": "R14", "when_need": "existing_debt", "product_has": "affordability_check", "verdict": "investigate", "reason": "Existing debts reduce how much the client can borrow; check them before recommending."}
+]
