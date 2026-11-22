@@ -1,0 +1,15 @@
+{"id": "h-income-01", "client": "layla_haddad", "slice": "positive", "question": "How regular is your income?", "unlocks": ["irregular_income"], "on_topic": true}
+{"id": "h-income-02", "client": "layla_haddad", "slice": "positive_paraphrase", "question": "Do you get paid the same amount every month?", "unlocks": ["irregular_income"], "on_topic": true}
+{"id": "h-income-03", "client": "layla_haddad", "slice": "positive_paraphrase", "question": "What happens in a month when the agencies don't send you work?", "unlocks": ["irregular_income"], "on_topic": true}
+{"id": "h-wedding-01", "client": "layla_haddad", "slice": "positive", "question": "What is the money for?", "unlocks": ["wedding_savings"], "on_topic": true}
+{"id": "h-wedding-02", "client": "layla_haddad", "slice": "positive_paraphrase", "question": "Is anything big coming up in your life soon?", "unlocks": ["wedding_savings"], "on_topic": true}
+{"id": "h-wedding-03", "client": "layla_haddad", "slice": "positive_paraphrase", "question": "When will you need to use these savings?", "unlocks": ["wedding_savings"], "on_topic": true}
+{"id": "h-exp-01", "client": "layla_haddad", "slice": "positive", "question": "Which financial products have you used before?", "unlocks": ["no_investment_experience"], "on_topic": true}
+{"id": "h-exp-02", "client": "layla_haddad", "slice": "positive_paraphrase", "question": "How familiar are you with funds and shares?", "unlocks": ["no_investment_experience"], "on_topic": true}
+{"id": "h-exp-03", "client": "layla_haddad", "slice": "positive_paraphrase", "question": "Have you ever had anything besides a current account?", "unlocks": ["no_investment_experience"], "on_topic": true}
+{"id": "h-near-01", "client": "layla_haddad", "slice": "near_miss", "question": "What kind of design work do you do?", "unlocks": [], "on_topic": true}
+{"id": "h-near-02", "client": "layla_haddad", "slice": "public_fact", "question": "How long have you lived in Qatar?", "unlocks": [], "on_topic": true}
+{"id": "h-near-03", "client": "layla_haddad", "slice": "near_miss", "question": "Which agencies do you work with?", "unlocks": [], "on_topic": true}
+{"id": "h-near-04", "client": "layla_haddad", "slice": "near_miss", "question": "Would you like a debit card?", "unlocks": [], "on_topic": true}
+{"id": "h-pitch-01", "client": "layla_haddad", "slice": "policy_pitch_conflict", "question": "Our Equity Growth Fund could grow your savings quickly.", "unlocks": ["no_investment_experience", "wedding_savings"], "on_topic": true, "products_proposed": ["equity_growth_fund"]}
+{"id": "h-multi-01", "client": "layla_haddad", "slice": "policy_multi", "question": "How steady is your work, and what are you saving for?", "unlocks": ["irregular_income", "wedding_savings"], "on_topic": true}
