@@ -139,3 +139,4 @@ def test_model_down_at_start(api, model):
 def test_security_headers(api):
     headers = api.get("/api/health").headers
     assert headers["x-content-type-options"] == "nosniff" and headers["x-frame-options"] == "DENY"
+    assert "script-src 'self'" in headers["content-security-policy"]
