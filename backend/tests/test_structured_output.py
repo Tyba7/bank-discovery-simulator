@@ -35,7 +35,7 @@ def test_parallel_failures_drop_an_unsupported_mode_only_once(monkeypatch):
         if kwargs.get("response_format", {}).get("type") == "json_schema":
             barrier.wait(timeout=5)  # every thread fails on json_schema at the same moment
             raise litellm.BadRequestError("json_schema not supported", "fake-model", "openai", response=None)
-        reply = {"reason": "ok", "leaked_need_ids": [], "broke_character": False, "invented_fact": False}
+        reply = {"reason": "ok", "revealed_need_ids": [], "broke_character": False, "invented_fact": False}
         return litellm.ModelResponse(choices=[{"message": {"role": "assistant", "content": json.dumps(reply)}}])
 
     monkeypatch.setattr(litellm, "completion", complete)

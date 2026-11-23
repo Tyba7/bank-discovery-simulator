@@ -19,7 +19,7 @@ CLASSIFICATION = {
     "injection_attempt": False,
     "question_type": "open",
 }
-GUARD = {"reason": "fine", "leaked_need_ids": [], "broke_character": False, "invented_fact": False}
+GUARD = {"reason": "fine", "revealed_need_ids": [], "broke_character": False, "invented_fact": False}
 
 
 def response(text, finish="stop"):

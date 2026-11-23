@@ -12,7 +12,7 @@ from pydantic import BaseModel, create_model
 from app.checks import check_input, check_numbers, fence
 from app.content import Client, Content
 from app.llm import LLM
-from app.prompts import Prompt
+from app.prompts import Prompt, variant_options
 from app.suitability import conflicts
 from app.telemetry import llm_scope
 
@@ -93,12 +93,12 @@ def classification_model(client: Client, product_ids: list[str]) -> type[BaseMod
     )
 
 
-def guard_model(locked_ids: list[str]) -> type[BaseModel]:
-    leaked = list_of(locked_ids) if locked_ids else list[str]
+def guard_model(need_ids: list[str]) -> type[BaseModel]:
+    """The model only says which private facts a reply reveals; code decides which of those were still locked."""
     return create_model(
         "GuardVerdict",
         reason=(str, ...),
-        leaked_need_ids=(leaked, ...),
+        revealed_need_ids=(list_of(need_ids), ...),
         broke_character=(bool, ...),
         invented_fact=(bool, ...),
     )
@@ -163,7 +163,7 @@ def check_reply(
     message: str,
     draft: str,
 ) -> ReplyCheck:
-    """Numbers compared in code, then an LLM judge restricted to the locked need ids."""
+    """Numbers compared in code; the model says which private facts the reply reveals, code keeps the locked ones."""
     shared = [n for n in client.hidden_needs if n.id in unlocked]
     locked = [n for n in client.hidden_needs if n.id not in unlocked]
     public = f"{client.occupation} {client.background} {client.stated_goal}"
@@ -172,26 +172,35 @@ def check_reply(
     number_leak, new_number = check_numbers(draft, allowed, " ".join(n.fact for n in locked))
     system = prompt.render(
         public=public,
-        unlocked_facts="\n".join(f"- {n.id}: {n.fact}" for n in shared) or "(none)",
-        locked_facts="\n".join(f"- {n.id}: {n.fact}" for n in locked) or "(none)",
+        facts="\n".join(f"- {n.id}: {n.fact}" for n in client.hidden_needs),
     )
     user = f"<question>\n{fence(message)}\n</question>\n<reply>\n{fence(draft)}\n</reply>"
     with llm_scope(role="guard", prompt=prompt.version):
         verdict = llm.chat_json(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            guard_model([n.id for n in locked]),
+            guard_model([n.id for n in client.hidden_needs]),
             max_tokens=JSON_MAX_TOKENS,
         )
-    leaked = sorted(set(verdict.leaked_need_ids) & {n.id for n in locked})
+    leaked = sorted(set(verdict.revealed_need_ids) & {n.id for n in locked})  # revealing an unlocked fact is fine
     return ReplyCheck(verdict, leaked, number_leak, new_number)
+
+
+def product_note(products) -> str:
+    """Public catalogue facts about the products the adviser just proposed, so the client can react to what they are
+    (KI-01). Nothing hidden: this is what the student sees in the catalogue."""
+    # Features only: in evals, limitations such as "Not Sharia-compliant" led the client to invent objections.
+    lines = [f"- {p.name}: {'; '.join(p.features)}." for p in products]
+    return "\nThe adviser is proposing:\n" + "\n".join(lines) + "\nReact to it as yourself.\n"
 
 
 def turn_number(state) -> int:
     return sum(t["role"] == "student" for t in state.get("transcript", [])) + 1
 
 
-def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointer=None):
-    classifier_prompt, client_prompt, guard_prompt = Prompt("classifier"), Prompt("client"), Prompt("guard")
+def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointer=None, variant: str | None = None):
+    """variant: a prompt variant under prompts/variants/ (A/B testing); None is the default prompts and options."""
+    classifier_prompt, client_prompt, guard_prompt = (Prompt(n, variant) for n in ("classifier", "client", "guard"))
+    options = variant_options(variant)
 
     def event(state, code, detail):
         return {"code": code, "turn": turn_number(state), "detail": detail}
@@ -263,6 +272,8 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
     def client_reply(state):
         client, c = content.clients[state["client_id"]], state["classification"]
         note = INJECTION_NOTE if c["injection_attempt"] else "" if c["on_topic"] else OFF_TOPIC_NOTE
+        if options.get("product_note") and c["products_proposed"] and not c["injection_attempt"]:
+            note += product_note([content.products[p] for p in c["products_proposed"]])
         if state["problems"]:
             note += (
                 f"\nYour previous draft was rejected because {'; '.join(state['problems'])}. "

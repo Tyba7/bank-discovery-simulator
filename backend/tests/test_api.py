@@ -40,7 +40,7 @@ class FakeModel:
                 }
             )
         if schema == "GuardVerdict":
-            return reply({"reason": "ok", "leaked_need_ids": [], "broke_character": False, "invented_fact": False})
+            return reply({"reason": "ok", "revealed_need_ids": [], "broke_character": False, "invented_fact": False})
         if schema == "SummaryLabels":
             return reply({"reason": "test", "need_ids": []})
         if schema == "CoachFeedback":
