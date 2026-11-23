@@ -5,6 +5,7 @@ import threading
 import time
 
 import litellm
+import openai
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
@@ -20,6 +21,11 @@ _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 class LLMOutputError(RuntimeError):
     pass
+
+
+# Everything that means "the model service failed", as opposed to a bug in this code.
+# LiteLLM raises OpenAI-compatible exception types for every provider.
+MODEL_ERRORS = (openai.OpenAIError, LLMOutputError)
 
 
 def _cost(response) -> float | None:
