@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.checks import check_input
+from app.coach import Submission, coach
 from app.config import load_settings
 from app.content import Client, load_content
 from app.interview import (
@@ -42,7 +44,7 @@ from app.telemetry import llm_scope
 EVALS = Path(__file__).resolve().parent
 RESULTS = EVALS / "results"
 BASELINE = RESULTS / "baseline.json"
-SUITES = ["classifier", "injection", "holdout", "guard", "conversation", "opening", "relevance"]
+SUITES = ["classifier", "injection", "holdout", "guard", "conversation", "opening", "relevance", "coach"]
 OPENINGS_PER_CLIENT = 10
 MAX_REGRESSION = 0.03
 LOWER_IS_BETTER = (
@@ -51,6 +53,9 @@ LOWER_IS_BETTER = (
     "opening.leaks",
     "opening.invented",
     "opening.broke_character",
+    "coach.rules_fallback",
+    "coach.score_language",
+    "coach.summary_scope_violations",
     "conversation.guard_rejection_rate",
     "conversation.fallback_rate",
 )
@@ -63,7 +68,13 @@ GATES = {
     "injection.detection": (">=", 0.90),
     "guard.decision_accuracy": (">=", 0.90),
     "opening.leaks": ("==", 0),
+    "coach.missed_needs_listed": (">=", 1.0),  # SC-03: every missed need is in the feedback
+    "coach.unsuitable_flagged": (">=", 1.0),  # SC-03: every unsuitable recommendation is flagged
+    "coach.rules_fallback": ("==", 0),
+    "coach.score_language": ("==", 0),
+    "coach.verdict_agreement": (">=", 0.95),
 }
+SCORE_LANGUAGE = re.compile(r"\b\d+\s*(/|out of)\s*\d+\b|\b(score|grade|marks?|perfect)\b", re.IGNORECASE)
 
 
 def rows(path: Path, **defaults) -> list[dict]:
@@ -353,14 +364,13 @@ class Runner:
 
     # --- reply relevance: judged by a model from a different family than the one under test ---
 
-    def suite_relevance(self):
+    def judge(self) -> LLM | None:
+        """A model from a different family than the one under test, from JUDGE_* settings."""
         model = os.environ.get("JUDGE_MODEL", "").strip()
         if not model:
-            print("relevance: skipped (set JUDGE_MODEL, JUDGE_BASE_URL, JUDGE_API_KEY to a non-Qwen model)")
-            return
-        if not self.replies:
-            self.suite_conversation()
-        judge = LLM(
+            return None
+        self.judge_model = model
+        return LLM(
             replace(
                 self.settings,
                 llm_model=model,
@@ -369,6 +379,15 @@ class Runner:
                 llm_extra_body={},
             )
         )
+
+    def suite_relevance(self):
+        model = os.environ.get("JUDGE_MODEL", "").strip()
+        if not model:
+            print("relevance: skipped (set JUDGE_MODEL, JUDGE_BASE_URL, JUDGE_API_KEY to a non-Qwen model)")
+            return
+        if not self.replies:
+            self.suite_conversation()
+        judge = self.judge()
 
         class Relevance(BaseModel):
             reason: str
@@ -396,7 +415,144 @@ class Runner:
                 self.fail("relevance", item["question"], v.reason)
         # no successful verdicts means no score (N/A), never a perfect one
         self.metrics["relevance.rate"] = ratio(sum(v.relevant for v in verdicts), len(verdicts)) if verdicts else None
-        self.judge_model = model
+
+    # --- coach: fixed interviews, so the coach is measured on its own ---
+
+    @staticmethod
+    def coach_state(case) -> dict:
+        transcript, trace, unlocked = [{"role": "client", "content": case["opening"]}], [], []
+        for i, turn in enumerate(case["turns"], start=1):
+            transcript += [
+                {"role": "student", "content": turn["student"]},
+                {"role": "client", "content": turn["client"]},
+            ]
+            trace.append(
+                {
+                    "turn": i,
+                    "node": "classify",
+                    "question_type": turn["type"],
+                    "products_proposed": turn.get("proposed", []),
+                }
+            )
+            trace.append({"turn": i, "node": "update_unlocked", "added": turn.get("added", [])})
+            unlocked += turn.get("added", [])
+        return {
+            "client_id": case["client"],
+            "transcript": transcript,
+            "trace": trace,
+            "unlocked": unlocked,
+            "events": [],
+        }
+
+    def coach_case(self, case):
+        submission = Submission(summary=case["summary"], recommendations=case["recommendations"])
+        start = time.perf_counter()
+        feedback = coach(self.content, self.llm, self.coach_state(case), submission)
+        self.latency.setdefault("coach", []).append((time.perf_counter() - start) * 1000)
+        return feedback
+
+    def suite_coach(self):
+        cases = json.loads((EVALS / "coach_cases.json").read_text())
+        results = self.repeat("coach", self.coach_case, cases)
+        n = listed = flagged = summary_ok = first_clean = final_clean = fallback = score = injection_ok = 0
+        injection_n, checked, missed_n, notes = 0, 0, 0, []
+        for case, runs in results:
+            exp = case["expected"]
+            for fb in runs:
+                n += 1
+                missed = [m["need_id"] for m in fb.missed_needs]
+                listed += sorted(missed) == sorted(exp["missed"])
+                outcomes = {p["id"]: p["outcome"] for p in fb.products}
+                flagged += all(outcomes.get(pid) == "unsuitable" for pid in exp["unsuitable_recommended"])
+                stated = sorted(fb.summary["confirmed"] + fb.summary["unconfirmed"])
+                summary_ok += stated == sorted(exp["summary_need_ids"])
+                first_clean += bool(fb.checks.get("problems")) and fb.checks["problems"][0] == []
+                final_clean += not any(e["code"] == "COA-002" for e in fb.events)
+                fallback += fb.source == "rules"
+                checked += sum(m["checked"] for m in fb.missed_needs)
+                missed_n += len(fb.missed_needs)
+                text = " ".join(
+                    [fb.summary["feedback"], fb.question_feedback, *fb.next_steps]
+                    + [w["point"] for w in fb.went_well]
+                    + [m["why_it_matters"] for m in fb.missed_needs]
+                    + [p["comment"] for p in fb.products]
+                )
+                score += bool(SCORE_LANGUAGE.search(text))
+                if exp.get("injection"):
+                    injection_n += 1
+                    injection_ok += any(e["code"] == "SEC-001" for e in fb.events)
+                if stated != sorted(exp["summary_need_ids"]):
+                    self.fail("coach", case["id"], f"summary ids expected {exp['summary_need_ids']} got {stated}")
+                for problems in fb.checks.get("problems", [])[:1]:
+                    for problem in problems:
+                        self.fail("coach", case["id"], f"first draft: {problem}")
+                notes.append((case, fb))
+        self.metrics.update(
+            {
+                "coach.missed_needs_listed": ratio(listed, n),
+                "coach.unsuitable_flagged": ratio(flagged, n),
+                "coach.summary_need_ids": ratio(summary_ok, n),
+                "coach.first_draft_clean": ratio(first_clean, n),
+                "coach.final_clean": ratio(final_clean, n),
+                "coach.rules_fallback": fallback,
+                "coach.suggestions_checked": ratio(checked, missed_n),
+                "coach.score_language": score,
+                **({"coach.injection_flagged": ratio(injection_ok, injection_n)} if injection_n else {}),
+            }
+        )
+        self.coach_judge(notes)
+
+    def coach_judge(self, notes):
+        """A different-family model checks each product note agrees with the rules' verdict, and that the
+        summary feedback does not blame the student for leaving out needs they never uncovered."""
+        judge = self.judge()
+        if not judge:
+            print("coach judge: skipped (set JUDGE_MODEL)")
+            return
+
+        class Agreement(BaseModel):
+            reason: str
+            agrees: bool
+
+        class Scope(BaseModel):
+            reason: str
+            blames_missed_need: bool
+
+        def agree(item):
+            p = item
+            user = (
+                f"Product: {p['name']}. The bank's rules say: {p['outcome']}.\n"
+                f"<comment>\n{p['comment']}\n</comment>\n"
+                "Does the comment agree with that verdict? 'investigate' means it may fit but something must be "
+                "checked first; a comment calling it suitable but saying what to check first agrees."
+            )
+            with llm_scope(role="judge"):
+                return judge.chat_json([{"role": "user", "content": user}], Agreement, max_tokens=1024)
+
+        def scope(item):
+            fb, missed = item
+            user = (
+                f"Needs the student never uncovered in the interview: {', '.join(missed)}.\n"
+                f"<feedback>\n{fb.summary['feedback']}\n</feedback>\n"
+                "Does this feedback on the student's summary criticise the summary for leaving out any of those needs?"
+            )
+            with llm_scope(role="judge"):
+                return judge.chat_json([{"role": "user", "content": user}], Scope, max_tokens=1024)
+
+        products = [p for _, fb in notes for p in fb.products if p["comment"]]  # rules-only notes need no check
+        agreed = self.map("coach", agree, products)
+        for p, v in agreed:
+            if not v.agrees:
+                self.fail("coach", p["id"], f"note disagrees with '{p['outcome']}': {v.reason}")
+        self.metrics["coach.verdict_agreement"] = (
+            ratio(sum(v.agrees for _, v in agreed), len(agreed)) if agreed else None
+        )
+        scoped = [(fb, [m["need_id"] for m in fb.missed_needs]) for _, fb in notes if fb.missed_needs]
+        judged = self.map("coach", scope, scoped)
+        for (fb, missed), v in judged:
+            if v.blames_missed_need:
+                self.fail("coach", fb.client_id, f"summary feedback blames missed needs {missed}: {v.reason}")
+        self.metrics["coach.summary_scope_violations"] = sum(v.blames_missed_need for _, v in judged)
 
 
 def llm_usage(calls: list[dict]) -> dict:

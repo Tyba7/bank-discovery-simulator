@@ -19,6 +19,7 @@ from app.telemetry import llm_scope
 log = logging.getLogger(__name__)
 
 HISTORY_MESSAGES = 20
+JSON_MAX_TOKENS = 600  # room for the reason field; some models (Haiku) write longer reasons and were cut at 300
 MAX_REPLY_ATTEMPTS = 2  # first draft + one rewrite
 GREETING = "Hello, thanks for coming in. How can I help you today?"
 OPENING_NOTE = (
@@ -68,12 +69,16 @@ class InterviewState(TypedDict, total=False):
     attempts: int
 
 
-def list_of(ids: list[str]):
-    """A list[Literal[...]] built at runtime from content ids, so the model can only answer with known ids.
+def one_of(ids: list[str]):
+    """A Literal[...] built at runtime from content ids, so the model can only answer with known ids.
 
     Static checkers want Literal values written in the source; these come from content files.
     """
-    return list[Literal[tuple(ids)]]  # pyright: ignore[reportInvalidTypeForm]
+    return Literal[tuple(ids)]  # pyright: ignore[reportInvalidTypeForm]
+
+
+def list_of(ids: list[str]):
+    return list[one_of(ids)]  # pyright: ignore[reportInvalidTypeForm]
 
 
 def classification_model(client: Client, product_ids: list[str]) -> type[BaseModel]:
@@ -126,7 +131,11 @@ def classify_message(content: Content, llm: LLM, prompt: Prompt, client: Client,
     )
     schema = classification_model(client, list(content.products))
     with llm_scope(role="classifier", prompt=prompt.version):
-        result = llm.chat_json([{"role": "system", "content": system}, {"role": "user", "content": user}], schema)
+        result = llm.chat_json(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            schema,
+            max_tokens=JSON_MAX_TOKENS,
+        )
     return result.model_dump()
 
 
@@ -171,6 +180,7 @@ def check_reply(
         verdict = llm.chat_json(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             guard_model([n.id for n in locked]),
+            max_tokens=JSON_MAX_TOKENS,
         )
     leaked = sorted(set(verdict.leaked_need_ids) & {n.id for n in locked})
     return ReplyCheck(verdict, leaked, number_leak, new_number)
