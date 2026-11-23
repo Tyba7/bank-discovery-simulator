@@ -180,6 +180,16 @@ every claim.
 **Sessions** live in memory: no database, no login. A failed model call during a turn is rolled back to the previous
 checkpoint, so it leaves no trace: no half-processed question, no unlocked need.
 
+**What the models see of the conversation.** The stored transcript keeps every message for the student's screen and
+the export. The models get a cleaned view instead:
+- **Window:** the last 10 whole exchanges, so user and assistant turns always alternate.
+- **Removed messages:** a message blocked as an attack, one that was too long, or one that was empty is replaced by
+  a short placeholder in every later prompt (classifier, client, guard and coach). Its text is never sent to a model
+  again.
+- **Fallback replies:** "Sorry, could you ask me that another way?" is shown to models as "you asked the adviser to
+  rephrase", not as the client's own words, and is flagged `fallback` in the export.
+- **Escaping:** angle brackets in student text are escaped rather than deleted, so "income < 10,000" keeps its meaning.
+
 ---
 
 ## Editing clients and products
@@ -209,7 +219,7 @@ uv --directory backend run pytest tests/test_content.py tests/test_suitability.p
 
 | Risk | What this project does |
 |---|---|
-| LLM01 Prompt injection | Input check in code before any model call; the classifier flags injection, and an injection turn unlocks nothing; student text is fenced as data in every prompt; the coach screens the summary and recommendation reasons. 48 attack cases, 0 unlocks on every model tested. |
+| LLM01 Prompt injection | Input check in code before any model call; the classifier flags injection, and an injection turn unlocks nothing; student text is fenced as data in every prompt; blocked and over-long messages are replaced by a placeholder in every later prompt, so attack text never reaches a model twice; the coach screens the summary and recommendation reasons. 48 attack cases, 0 unlocks on every model tested; a 12-turn conversation with an injection and an over-long message checks that later turns stay correct and the client never repeats the blocked text. |
 | LLM02 Sensitive information disclosure | Locked facts are never in the client prompt (unit-tested for every combination of unlocked needs). The browser receives only public client facts, the catalogue and the conversation; hidden needs appear only in the feedback. API keys stay on the server. |
 | LLM05 Improper output handling | Every model output that drives logic is schema-validated JSON with enum-restricted ids; React renders all text as text (tested with HTML and script payloads); Content-Security-Policy allows same-origin scripts only. |
 | LLM06 Excessive agency | The models have no tools and no actions; they only produce text and labels. |

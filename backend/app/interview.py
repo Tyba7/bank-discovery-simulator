@@ -2,7 +2,7 @@ import logging
 import operator
 import time
 from collections.abc import Mapping
-from typing import Annotated, Literal, NamedTuple, TypedDict
+from typing import Annotated, Literal, NamedTuple, NotRequired, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
@@ -18,7 +18,7 @@ from app.telemetry import llm_scope
 
 log = logging.getLogger(__name__)
 
-HISTORY_MESSAGES = 20
+HISTORY_EXCHANGES = 10  # whole student+client exchanges the models see, so roles always alternate
 JSON_MAX_TOKENS = 600  # room for the reason field; some models (Haiku) write longer reasons and were cut at 300
 MAX_REPLY_ATTEMPTS = 2  # first draft + one rewrite
 GREETING = "Hello, thanks for coming in. How can I help you today?"
@@ -39,6 +39,14 @@ FALLBACK = {
     "too_long": "Sorry, that's a lot to take in. Could you ask me one thing at a time?",
     "guard": "Sorry, could you ask me that another way?",
 }
+# What models are shown instead of a stored turn that must not reach them again. The stored transcript keeps the
+# real text for the student's screen; only model-facing history uses these.
+REMOVED = {
+    "injection": "(The adviser's message here was removed: it tried to change your role or get private information.)",
+    "too_long": "(The adviser's message here was removed: it was too long.)",
+    "empty": "(The adviser sent an empty message.)",
+}
+FALLBACK_SHOWN = "(You asked the adviser to rephrase the question.)"
 FAIL_CLOSED = {
     "reason": "classifier failed",
     "unlocks": [],
@@ -52,6 +60,7 @@ FAIL_CLOSED = {
 class Turn(TypedDict):
     role: Literal["student", "client"]
     content: str
+    flag: NotRequired[str]  # student: injection, too_long or empty; client: fallback
 
 
 class InterviewState(TypedDict, total=False):
@@ -65,6 +74,7 @@ class InterviewState(TypedDict, total=False):
     input_flag: str | None
     classification: dict
     draft: str
+    reply_flag: str | None  # "fallback" when the reply is the safe fallback, not the client's words
     problems: list[str]
     attempts: int
 
@@ -118,13 +128,34 @@ def client_system_prompt(prompt: Prompt, client: Client, unlocked: set[str], not
     )
 
 
+def model_text(turn: Turn) -> str:
+    """What a model is shown for one stored turn: blocked messages and fallback replies are replaced, the rest fenced."""
+    flag = turn.get("flag")
+    if turn["role"] == "student" and flag in REMOVED:
+        return REMOVED[flag]
+    if turn["role"] == "client" and flag == "fallback":
+        return FALLBACK_SHOWN
+    return fence(turn["content"])
+
+
+def model_history(transcript: list[Turn], exchanges: int = HISTORY_EXCHANGES) -> list[dict]:
+    """The last whole exchanges, plus the opening while it is still in the window, in model_text form.
+
+    The transcript is the opening followed by student/client pairs, so whole exchanges keep the roles alternating.
+    """
+    opening, rest = transcript[:1], transcript[1:]
+    pairs = [rest[i : i + 2] for i in range(0, len(rest), 2)]
+    kept = pairs[-exchanges:]
+    window = (opening if len(kept) == len(pairs) else []) + [t for pair in kept for t in pair]
+    return [{"role": t["role"], "content": model_text(t)} for t in window]
+
+
 def classify_message(content: Content, llm: LLM, prompt: Prompt, client: Client, transcript, message: str) -> dict:
     """One classifier call. Shared by the graph and the eval runner so evals test the production path."""
     products = "\n".join(f"- {p.id}: {p.name} [{', '.join(p.tags)}]" for p in content.products.values())
     system = prompt.render(needs="\n".join(f"- {n.id}: {n.topic}" for n in client.hidden_needs), products=products)
     history = "\n".join(
-        f"{'Adviser' if t['role'] == 'student' else 'Client'}: {fence(t['content'])}"
-        for t in transcript[-HISTORY_MESSAGES:]
+        f"{'Adviser' if t['role'] == 'student' else 'Client'}: {t['content']}" for t in model_history(transcript)
     )
     user = (
         f"<conversation>\n{history or '(start of interview)'}\n</conversation>\n<message>\n{fence(message)}\n</message>"
@@ -236,7 +267,14 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
 
     def screen(state):
         message, flag = check_input(state["student_message"])
-        update = {"message": message, "input_flag": flag, "problems": [], "attempts": 0, "_detail": {"flag": flag}}
+        update = {
+            "message": message,
+            "input_flag": flag,
+            "reply_flag": None,
+            "problems": [],
+            "attempts": 0,
+            "_detail": {"flag": flag},
+        }
         if flag == "injection":
             update["classification"] = {**FAIL_CLOSED, "reason": "input check", "injection_attempt": True}
             update["events"] = [event(state, "SEC-001", "input check")]
@@ -280,12 +318,16 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 "Write a new reply that fixes this."
             )
         system = client_system_prompt(client_prompt, client, set(state["unlocked"]), note)
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": GREETING}]
+        history = model_history(state["transcript"])
+        messages = [{"role": "system", "content": system}]
+        if history and history[0]["role"] == "client":  # the opening is still in the window; it answered the greeting
+            messages.append({"role": "user", "content": GREETING})
         messages += [
-            {"role": "user" if t["role"] == "student" else "assistant", "content": fence(t["content"])}
-            for t in state["transcript"][-HISTORY_MESSAGES:]
+            {"role": "user" if t["role"] == "student" else "assistant", "content": t["content"]} for t in history
         ]
-        messages.append({"role": "user", "content": fence(state["message"])})
+        # On an injection turn the client learns only that something was removed, never the attack text itself.
+        current = REMOVED["injection"] if c["injection_attempt"] else fence(state["message"])
+        messages.append({"role": "user", "content": current})
         attempt = state["attempts"] + 1
         with llm_scope(role="client", prompt=client_prompt.version):
             draft = llms["client"].chat(messages, max_tokens=200)
@@ -297,7 +339,12 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
 
     def guard(state):
         client = content.clients[state["client_id"]]
-        student_words = " ".join(t["content"] for t in state["transcript"] if t["role"] == "student")
+        # Removed messages never count as "what the adviser said": an attack quoting a locked amount must not make that
+        # amount look allowed to the number check, and the guard never reads the attack text itself.
+        student_words = " ".join(
+            t["content"] for t in state["transcript"] if t["role"] == "student" and not t.get("flag")
+        )
+        question = REMOVED["injection"] if state["classification"]["injection_attempt"] else state["message"]
         try:
             verdict, leaked, number_leak, new_number = check_reply(
                 content,
@@ -306,7 +353,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 client,
                 set(state["unlocked"]),
                 student_words,
-                state["message"],
+                question,
                 state["draft"],
             )
         except Exception as e:  # fail closed: an unchecked reply is never shown
@@ -345,15 +392,18 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
 
     def fallback(state):
         reason = state["input_flag"] if state["input_flag"] in FALLBACK else "guard"
-        return {"draft": FALLBACK[reason], "_detail": {"reason": reason}}
+        return {"draft": FALLBACK[reason], "reply_flag": "fallback", "_detail": {"reason": reason}}
 
     def finish(state):
-        return {
-            "transcript": [
-                {"role": "student", "content": state["message"]},
-                {"role": "client", "content": state["draft"]},
-            ]
+        injected = state.get("classification", {}).get("injection_attempt") and not state.get("input_flag")
+        flag = state.get("input_flag") or ("injection" if injected else None)
+        student = {"role": "student", "content": state["message"], **({"flag": flag} if flag else {})}
+        client = {
+            "role": "client",
+            "content": state["draft"],
+            **({"flag": "fallback"} if state.get("reply_flag") else {}),
         }
+        return {"transcript": [student, client]}
 
     graph = StateGraph(InterviewState)
     nodes = {

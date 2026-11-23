@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, create_model
 
 from app.checks import check_input, fence
 from app.content import Client, Content
-from app.interview import classify_message, list_of, needs_unlocked_by, one_of
+from app.interview import classify_message, list_of, model_text, needs_unlocked_by, one_of
 from app.llm import LLM
 from app.prompts import Prompt
 from app.suitability import assess
@@ -103,7 +103,10 @@ def _norm(text: str) -> str:
 
 
 def fact_sheet(content: Content, client: Client, state: dict, submission: Submission) -> FactSheet:
-    student_turns = [t["content"] for t in state.get("transcript", []) if t["role"] == "student"]
+    # A removed message (injection, too long, empty) cannot be quoted back as something that went well.
+    student_turns = [
+        "" if t.get("flag") else t["content"] for t in state.get("transcript", []) if t["role"] == "student"
+    ]
     trace = state.get("trace", [])
     unlocked_at: dict[str, int] = {}
     proposed: dict[str, list[int]] = {}
@@ -221,9 +224,9 @@ def render(prompt: Prompt, sheet: FactSheet, transcript: list[dict], submission:
     for t in transcript:
         if t["role"] == "student":
             turn += 1
-            interview.append(f"Turn {turn}, student: {fence(t['content'])}")
+            interview.append(f"Turn {turn}, student: {model_text(t)}")
         else:
-            interview.append(f"{'Opening' if turn == 0 else f'Turn {turn}'}, client: {fence(t['content'])}")
+            interview.append(f"{'Opening' if turn == 0 else f'Turn {turn}'}, client: {model_text(t)}")
     recs = [f"- {r.product_id}: {fence(r.reason)}" for r in submission.recommendations] or ["(none)"]
     pitches = sorted({t for p in sheet.products if p.verdict == "unsuitable" for t in p.discussed_turns})
     if pitches:  # stated per turn: the general rule alone was not enough in evals

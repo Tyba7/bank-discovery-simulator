@@ -34,7 +34,8 @@ def check_input(raw: str) -> tuple[str, str | None]:
 
 
 def fence(text: str) -> str:
-    return text.replace("<", "").replace(">", "")
+    """Escape angle brackets so text cannot open or close a prompt tag; "income < 10,000" keeps its meaning."""
+    return text.replace("<", "&lt;").replace(">", "&gt;")
 
 
 def numbers(text: str, words: bool = False) -> set[float]:
