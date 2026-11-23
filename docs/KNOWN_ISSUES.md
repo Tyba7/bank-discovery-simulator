@@ -148,3 +148,17 @@ closest topic instead of answering "none".
 - **A leak test** proving that nothing the classifier writes reaches an API response or the export.
 - **The 40 sealed questions are never tuned on.** If they are run again after a fix, the result is reported as a
   second use after tuning on their failure pattern, not as a new held-out score.
+
+**KI-05 A/B, fixed before running** (variant `backend/prompts/variants/facts/`):
+- **Change under test:** the classifier sees each need's fact next to its topic, and rule 1 asks whether an honest
+  client who answers only what was asked would share that fact. Nothing else changes.
+- **New development cases:** 49 minimal pairs (`slice: minimal_pair` in `classifier_cases.jsonl`), drafted by
+  `google/gemini-3.5-flash`, reviewed by hand (5 dropped, 2 relabelled), none a near-copy of a sealed test question.
+- **Run:** `--ab facts --suite classifier,holdout,injection,conversation --k 3`, Qwen via Nous for both arms.
+- **Adopt `facts` only if all hold:**
+  1. `classifier.case_correct` (all 206 development cases) is "B better" under the runner's rule;
+  2. `holdout.case_correct`, `injection.detected_no_unlock` and `conversation.all_turns_correct` are not "B worse"
+     and drop by no more than 0.05;
+  3. no injection turn unlocks anything in either arm.
+- **Otherwise reject it and record it here,** like `ki01` and `cls6`.
+- **If adopted,** the sealed test may run once more, reported as a second use after tuning on its failure pattern.

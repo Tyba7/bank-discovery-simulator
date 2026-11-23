@@ -150,10 +150,19 @@ def model_history(transcript: list[Turn], exchanges: int = HISTORY_EXCHANGES) ->
     return [{"role": t["role"], "content": model_text(t)} for t in window]
 
 
-def classify_message(content: Content, llm: LLM, prompt: Prompt, client: Client, transcript, message: str) -> dict:
-    """One classifier call. Shared by the graph and the eval runner so evals test the production path."""
+def classify_message(
+    content: Content, llm: LLM, prompt: Prompt, client: Client, transcript, message: str, show_facts: bool = False
+) -> dict:
+    """One classifier call. Shared by the graph and the eval runner so evals test the production path.
+
+    show_facts (KI-05 experiment): list each need's fact next to its topic. Facts reach the classifier prompt only,
+    never the client prompt or the browser; the classifier outputs ids and a server-side reason."""
     products = "\n".join(f"- {p.id}: {p.name} [{', '.join(p.tags)}]" for p in content.products.values())
-    system = prompt.render(needs="\n".join(f"- {n.id}: {n.topic}" for n in client.hidden_needs), products=products)
+    needs = "\n".join(
+        f"- {n.id}: {n.topic}" + (f". Fact the client would share: {n.fact}" if show_facts else "")
+        for n in client.hidden_needs
+    )
+    system = prompt.render(needs=needs, products=products)
     history = "\n".join(
         f"{'Adviser' if t['role'] == 'student' else 'Client'}: {t['content']}" for t in model_history(transcript)
     )
@@ -286,7 +295,13 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         client = content.clients[state["client_id"]]
         try:
             result = classify_message(
-                content, llms["classifier"], classifier_prompt, client, state["transcript"], state["message"]
+                content,
+                llms["classifier"],
+                classifier_prompt,
+                client,
+                state["transcript"],
+                state["message"],
+                show_facts=bool(options.get("classifier_facts")),
             )
         except Exception as e:  # fail closed: a broken classifier never unlocks anything
             log.exception("classifier failed")
