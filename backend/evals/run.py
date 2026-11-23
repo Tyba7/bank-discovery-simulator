@@ -30,7 +30,7 @@ from pydantic import BaseModel
 
 from app.checks import check_input
 from app.coach import Submission, coach
-from app.config import load_settings
+from app.config import load_role_settings, load_settings
 from app.content import Client, load_content
 from app.interview import (
     FAIL_CLOSED,
@@ -41,7 +41,7 @@ from app.interview import (
     classify_message,
     needs_unlocked_by,
 )
-from app.llm import LLM
+from app.llm import LLM, build_llms
 from app.prompts import Prompt, variant_options
 from app.suitability import conflicts
 from app.telemetry import llm_scope
@@ -108,8 +108,8 @@ def percentile(values: list[float], q: float) -> float:
 class Runner:
     def __init__(self, k: int, workers: int, variant: str | None = None):
         self.k, self.pool, self.variant = k, ThreadPoolExecutor(workers), variant
-        self.settings = load_settings()
-        self.llm = LLM(self.settings)
+        self.settings = load_settings()  # the default; the judge starts from it
+        self.llms = build_llms(load_role_settings())  # one client per role, as in the app
         self.content = load_content()
         layla = Client.model_validate_json((EVALS / "heldout" / "layla_haddad.json").read_text())
         self.content.clients[layla.id] = layla  # held-out client: never in content/, never used for tuning
@@ -173,7 +173,7 @@ class Runner:
                 "classify",
                 classify_message,
                 self.content,
-                self.llm,
+                self.llms["classifier"],
                 self.prompts["classifier"],
                 client,
                 case.get("history", []),
@@ -260,7 +260,7 @@ class Runner:
             "guard",
             check_reply,
             self.content,
-            self.llm,
+            self.llms["guard"],
             self.prompts["guard"],
             client,
             set(case["unlocked"]),
@@ -301,9 +301,7 @@ class Runner:
 
     def graph(self):
         if not hasattr(self, "_graph"):
-            self._graph = build_interview_graph(
-                self.content, {"classifier": self.llm, "client": self.llm, "guard": self.llm}, variant=self.variant
-            )
+            self._graph = build_interview_graph(self.content, self.llms, variant=self.variant)
         return self._graph
 
     def collect(self, state):
@@ -370,7 +368,7 @@ class Runner:
         self.collect(state)
         reply = state["transcript"][0]["content"]
         client = self.content.clients[client_id]
-        check = check_reply(self.content, self.llm, self.prompts["guard"], client, set(), "", GREETING, reply)
+        check = check_reply(self.content, self.llms["guard"], self.prompts["guard"], client, set(), "", GREETING, reply)
         return client_id, reply, check
 
     def suite_opening(self):
@@ -545,7 +543,9 @@ class Runner:
     def coach_case(self, case):
         submission = Submission(summary=case["summary"], recommendations=case["recommendations"])
         start = time.perf_counter()
-        feedback = coach(self.content, self.llm, self.coach_state(case), submission)
+        feedback = coach(
+            self.content, self.llms["coach"], self.coach_state(case), submission, checker=self.llms["classifier"]
+        )
         self.latency.setdefault("coach", []).append((time.perf_counter() - start) * 1000)
         return feedback
 
@@ -783,6 +783,7 @@ def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline:
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "git_commit": git("rev-parse", "--short", "HEAD") + ("-dirty" if git("status", "--porcelain") else ""),
         "model": runner.settings.llm_model,
+        "models": {role: llm.s.llm_model for role, llm in runner.llms.items()},
         "judge_model": getattr(runner, "judge_model", None),
         "variant": runner.variant,
         "prompts": {name: p.version for name, p in runner.prompts.items()},
@@ -847,6 +848,7 @@ def ab_main(args, suites: list[str]) -> int:
 
     a, b = summaries["A"], summaries["B"]
     print(f"\nA/B  model {a['model']}  k={args.k}  commit {a['git_commit']}  eval set {a['eval_set']}")
+    print(f"models per role: {a['models']}")
     print(f"A = default prompts {a['prompts']}")
     print(f"B = variant '{args.ab}' {b['prompts']}  {options.get('description', '')}")
     print("\npaired comparison (pass rate per case run; 95% CI from a case-level bootstrap; exact McNemar p)")
@@ -907,6 +909,7 @@ def main() -> int:
     dev, holdout, latency = result["metrics"], result["holdout"], result["latency_ms"]
     print(f"\nmodel {result['model']}  commit {result['git_commit']}  eval set {result['eval_set']}  k={args.k}")
     print(f"k={args.k} = {result['k_meaning']}")
+    print(f"models per role: {result['models']}")
     print("\ndev metrics:")
     for name, value in dev.items():
         before = baseline.get(name)

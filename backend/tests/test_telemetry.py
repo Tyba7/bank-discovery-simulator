@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import litellm
 import pytest
@@ -86,3 +87,15 @@ def test_every_model_call_is_traced_under_its_node(fake_completion):
     assert roles["client_reply"] == ["client"] and roles["guard"] == ["guard"]
     assert roles["update_unlocked"] == [] and roles["finish"] == []
     assert len(all_calls) == 4 and {c["session"] for c in all_calls} == {"s1"}  # outer scope sees every call
+
+
+def test_separate_role_clients_are_each_counted_once(fake_completion):
+    classifier, coach_llm = LLM(SETTINGS), LLM(replace(SETTINGS, llm_model="big-model"))
+    with llm_scope() as calls:
+        with llm_scope(role="classifier"):
+            classifier.chat([{"role": "user", "content": "hi"}])
+        with llm_scope(role="coach"):
+            coach_llm.chat([{"role": "user", "content": "hi"}])
+    usage = llm_usage(calls)
+    assert {k: v["calls"] for k, v in usage.items()} == {"classifier / fake-model": 1, "coach / big-model": 1}
+    assert sum(v["tokens_in"] for v in usage.values()) == 200  # 100 per call, nothing double-counted

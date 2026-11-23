@@ -20,10 +20,10 @@ from pydantic import BaseModel, Field
 
 from app.checks import MAX_MESSAGE_CHARS
 from app.coach import MAX_SUMMARY_CHARS, Recommendation, Submission, coach
-from app.config import load_settings
+from app.config import ROLES, load_role_settings
 from app.content import Content, load_content
 from app.interview import build_interview_graph
-from app.llm import LLM, MODEL_ERRORS
+from app.llm import LLM, MODEL_ERRORS, build_llms
 from app.sessions import Session, SessionStore
 
 log = logging.getLogger(__name__)
@@ -105,25 +105,27 @@ def student_feedback(feedback) -> dict:
 
 
 def create_app(llm: LLM | None = None, content: Content | None = None) -> FastAPI:
-    """llm and content can be injected (tests); otherwise they come from .env and content/ at startup."""
+    """llm and content can be injected (tests: one model for every role); otherwise they come from .env (one client
+    per role, see config.load_role_settings) and content/ at startup."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
         for noisy in ("LiteLLM", "httpx"):  # one line per HTTP call; app.telemetry already records every model call
             logging.getLogger(noisy).setLevel(logging.WARNING)
-        model = llm or LLM(load_settings())
+        llms = dict.fromkeys(ROLES, llm) if llm else build_llms(load_role_settings())
         app.state.content = content or load_content()
-        app.state.llm = model
+        app.state.llms = llms
         checkpointer = InMemorySaver()
-        app.state.graph = build_interview_graph(
-            app.state.content, {"classifier": model, "client": model, "guard": model}, checkpointer
-        )
+        app.state.graph = build_interview_graph(app.state.content, llms, checkpointer)
         app.state.sessions = SessionStore(checkpointer)
-        log.info("ready: model %s, %d clients", model.s.llm_model, len(app.state.content.clients))
+        log.info("ready: models %s, %d clients", models(app), len(app.state.content.clients))
         yield
 
     app = FastAPI(title="Bank Client Discovery Simulator", lifespan=lifespan)
+
+    def models(app: FastAPI) -> dict[str, str]:
+        return {role: llm.s.llm_model for role, llm in app.state.llms.items()}
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -166,7 +168,7 @@ def create_app(llm: LLM | None = None, content: Content | None = None) -> FastAP
 
     @app.get("/api/health")
     def health(request: Request) -> dict:
-        return {"status": "ok", "model": request.app.state.llm.s.llm_model}
+        return {"status": "ok", "models": models(request.app)}
 
     @app.get("/api/clients")
     def clients(request: Request) -> list[ClientCard]:
@@ -243,7 +245,9 @@ def create_app(llm: LLM | None = None, content: Content | None = None) -> FastAP
                 return student_feedback(session.feedback)  # submitting twice returns the same feedback
             state = request.app.state.graph.get_state(session.config()).values
             submission = Submission(summary=body.summary, recommendations=body.recommendations)
-            result = coach(content, request.app.state.llm, state, submission)
+            llms = request.app.state.llms
+            # Suggested questions are checked by the classifier the student actually faces, not the coach's model.
+            result = coach(content, llms["coach"], state, submission, checker=llms["classifier"])
             for e in result.events:
                 log.info("coach event %s in session %s: %s", e["code"], session.id, e["detail"])
             session.submission, session.feedback = submission, result
@@ -257,7 +261,7 @@ def create_app(llm: LLM | None = None, content: Content | None = None) -> FastAP
         out = session_out(request, session)
         body = {
             "exported_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "model": request.app.state.llm.s.llm_model,
+            "models": models(request.app),
             "client": out.client.model_dump(),
             "conversation": [m.model_dump() for m in out.messages],
             "submission": session.submission.model_dump() if session.submission else None,

@@ -83,9 +83,21 @@ live in `backend/.env`:
 | `LLM_TIMEOUT_SECONDS` | no | Per-call timeout (default 60) |
 | `LLM_EXTRA_BODY` | no | JSON added to every request, for provider-specific switches (see below) |
 | `LLM_CALL_LOG` | no | Path of a local JSONL file that gets one line per model call |
+| `CLASSIFIER_*`, `CLIENT_*`, `GUARD_*`, `COACH_*` | no | A different model per role (`_BASE_URL`, `_API_KEY`, `_MODEL`, `_EXTRA_BODY`). Empty values fall back to `LLM_*`. |
 | `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_MODEL` | no | Evaluation only: a model from a different family that grades the simulator |
 
 The API key stays on the server. It is never sent to the browser or written to logs.
+
+**Per-role models.** The four roles need different things:
+- **Classifier and guard** need exact, short JSON, so a small, fast model can do.
+- **Client persona** needs natural replies.
+- **Coach** runs once per session and benefits most from a stronger model, possibly with reasoning on.
+
+Set any role's `*_MODEL` (and, for another server, `*_BASE_URL` and `*_API_KEY`). `*_EXTRA_BODY` is that role's own
+switch, for example reasoning on for the coach only. A role on a different server does not inherit `LLM_EXTRA_BODY`,
+and `{}` clears it. Suggested questions in the coach's feedback are always checked by the classifier role's model,
+because that is the classifier the student faces. `/api/health`, the session export and every evaluation result
+record the model used for each role. Re-run the evaluation for every combination you change.
 
 **Thinking models.** The client, classifier and guard need short, direct answers. Turn reasoning off:
 
