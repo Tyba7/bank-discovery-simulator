@@ -50,3 +50,11 @@ def test_rule_needs_exactly_one_product_condition(content_copy):
     edit(content_copy / "rules.json", lambda d: d[0].update(product_has="interest_bearing"))  # R01 has product_lacks
     with pytest.raises(ContentError, match="exactly one of product_has, product_lacks"):
         load_content(content_copy)
+
+
+def test_public_text_states_sharia_compliance_exactly_when_tagged():
+    # The rules read tags; students and the client read features. They must agree, or a compliant product looks
+    # interest-bearing to the client (KI-01: Khalid rejected Murabaha as "interest-based").
+    for p in load_content().products.values():
+        says = any("sharia-compliant" in f.lower() for f in p.features)
+        assert says == ("sharia_compliant" in p.tags), p.id

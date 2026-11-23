@@ -83,9 +83,21 @@ live in `backend/.env`:
 | `LLM_TIMEOUT_SECONDS` | no | Per-call timeout (default 60) |
 | `LLM_EXTRA_BODY` | no | JSON added to every request, for provider-specific switches (see below) |
 | `LLM_CALL_LOG` | no | Path of a local JSONL file that gets one line per model call |
+| `CLASSIFIER_*`, `CLIENT_*`, `GUARD_*`, `COACH_*` | no | A different model per role (`_BASE_URL`, `_API_KEY`, `_MODEL`, `_EXTRA_BODY`). Empty values fall back to `LLM_*`. |
 | `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_MODEL` | no | Evaluation only: a model from a different family that grades the simulator |
 
 The API key stays on the server. It is never sent to the browser or written to logs.
+
+**Per-role models.** The four roles need different things:
+- **Classifier and guard** need exact, short JSON, so a small, fast model can do.
+- **Client persona** needs natural replies.
+- **Coach** runs once per session and benefits most from a stronger model, possibly with reasoning on.
+
+Set any role's `*_MODEL` (and, for another server, `*_BASE_URL` and `*_API_KEY`). `*_EXTRA_BODY` is that role's own
+switch, for example reasoning on for the coach only. A role on a different server does not inherit `LLM_EXTRA_BODY`,
+and `{}` clears it. Suggested questions in the coach's feedback are always checked by the classifier role's model,
+because that is the classifier the student faces. `/api/health`, the session export and every evaluation result
+record the model used for each role. Re-run the evaluation for every combination you change.
 
 **Thinking models.** The client, classifier and guard need short, direct answers. Turn reasoning off:
 
@@ -218,12 +230,13 @@ The AI behaviour is measured with repeatable evaluations ([`backend/evals/`](bac
 
 | Suite | Cases | Measures | Gate |
 |---|---|---|---|
-| classifier | 135 | unlock precision and recall per need, on-topic, products proposed | precision ≥ 0.95, recall ≥ 0.85 |
+| classifier | 157 | unlock precision and recall per need, on-topic, products proposed; includes 22 ordinary questions that use words like "hidden" or "secret" | precision ≥ 0.95, recall ≥ 0.85 |
 | injection | 48 | attacks detected, attacks that unlocked anything | 0 unlocks |
 | holdout | 15 | a client never used for tuning (Layla), reported separately | — |
-| guard | 29 | leak, character-break and invented-fact decisions vs human labels, Cohen's κ | accuracy ≥ 0.90 |
+| guard | 35 | leak, character-break and invented-fact (including beliefs and preferences) decisions vs human labels, Cohen's κ | accuracy ≥ 0.90 |
 | conversation | 15 (82 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates | — |
 | opening | 20 | the first message never leaks | 0 leaks |
+| pitch | 24 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
 | relevance | per reply | a different-family judge checks that replies answer the question | — |
 | coach | 7 | missed needs listed, unsuitable products flagged, quotes grounded, summary labels, verdict agreement (judge) | SC-03 gates = 1.0 |
 
@@ -238,6 +251,27 @@ uv --directory backend run python -m evals.run --suite all --k 3
   failed calls). The run fails on a gate failure or a drop of more than 0.03.
 - **Tracing:** every model call is recorded with its graph node, role, tokens, cost and latency.
 - **`k`** is within-session repeatability, not a robustness estimate.
+- **A/B tests:** `--ab VARIANT` compares the current prompts with `backend/prompts/variants/VARIANT/` on the same cases
+  at the same time. It reports per-case paired results (B−A with a case-level bootstrap 95% CI, exact McNemar p) and
+  a verdict from a decision rule fixed in code. Two prompt changes were rejected this way; see
+  [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
+
+**Baseline** (`backend/evals/results/baseline.json`; hosted `qwen/qwen3.6-35b-a3b` for every role, judge
+`google/gemini-3.5-flash`, k=3, 23 Nov 2026):
+
+| Area | Result |
+|---|---|
+| Hidden-need unlocks | precision 1.00 for 5 of 6 needs; Sharia 0.947 (one product-pitch case, just under the gate); recall 1.00 except remittances 0.93 |
+| Injection | 48 attacks: all detected, none unlocked anything; 2 ordinary questions wrongly flagged ([KI-03](docs/KNOWN_ISSUES.md)) |
+| Disclosure guard | accuracy 0.962, κ 0.923, leak precision 1.00, invented-fact recall 0.86 ([KI-02](docs/KNOWN_ISSUES.md)) |
+| Conversations | all turns correct in all 3 runs: 0.867; per turn 0.931; one social-pressure attack unlocked needs in 2 of 3 runs ([KI-04](docs/KNOWN_ISSUES.md)) |
+| Client replies | relevance 1.00; sensible product reactions 0.972; 12.9% of drafts rewritten by the guard, 4.1% of turns ended on the safe fallback |
+| Openings | 0 leaks, 0 invented facts, 0 character breaks |
+| Coach | every gate 1.0 (missed needs listed, unsuitable products flagged, verdicts agree with the rules, no scores); 90% of first drafts pass all checks |
+| Time per turn | p50 7.0 s, p95 10.8 s |
+
+The same model gives different results in different sessions. Sharia precision has ranged from 0.88 to 1.00, and
+turn accuracy from 0.93 to 0.99. A single run is a sample, not a guarantee.
 
 **Tests** (no model needed):
 

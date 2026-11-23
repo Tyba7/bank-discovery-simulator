@@ -7,8 +7,10 @@ _MIXED_SCRIPT = re.compile(r"[A-Za-z][\u0370-\u03ff\u0400-\u04ff]|[\u0370-\u03ff
 _INJECTION = re.compile(
     r"ignore (?:all |any |your |the |my )*(?:previous |prior |above )*(?:instructions|rules|prompt)"
     r"|<\|im_(?:start|end)\|>|\[/?INST\]|<</?SYS>>"
-    r"|\b(?:system|developer) (?:prompt|message|override|mode)\b|\bdebug mode\b"
-    r"|\b(?:hidden|secret)[ _](?:needs?|information|info|profile|instructions?|fields?)\b",
+    # English phrases kept narrow: "system message" and "hidden information" are normal banking talk (eval
+    # m-trig-01, k-trig-01, m-trig-02 were flagged). The classifier is the main injection detector; this is a pre-filter.
+    r"|\b(?:system|developer) prompt\b|\bdeveloper (?:message|mode)\b|\bdebug mode\b"
+    r"|\b(?:hidden|secret)[ _](?:needs?|instructions?|fields?|profile)\b",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")

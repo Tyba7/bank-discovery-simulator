@@ -175,3 +175,16 @@ class LLM:
                 return schema.model_validate_json(_extract_json(text))
             except ValidationError as e2:
                 raise LLMOutputError(f"{schema.__name__}: model output invalid after repair") from e2
+
+
+def build_llms(role_settings: dict[str, Settings]) -> dict[str, "LLM"]:
+    """One client per distinct setting: roles that share a model share an instance (and its JSON-mode fallback)."""
+    made: list[LLM] = []
+    llms = {}
+    for role, settings in role_settings.items():
+        llm = next((m for m in made if m.s == settings), None)
+        if llm is None:
+            llm = LLM(settings)
+            made.append(llm)
+        llms[role] = llm
+    return llms
