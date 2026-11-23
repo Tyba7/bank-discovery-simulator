@@ -58,6 +58,7 @@ class ProductCard(BaseModel):
 class Message(BaseModel):
     role: Literal["student", "client"]
     content: str
+    flag: str | None = None  # student: injection, too_long or empty (removed from later prompts); client: fallback
 
 
 class StartSession(BaseModel):

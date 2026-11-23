@@ -107,8 +107,9 @@ def percentile(values: list[float], q: float) -> float:
 
 
 class Runner:
-    def __init__(self, k: int, workers: int, variant: str | None = None):
+    def __init__(self, k: int, workers: int, variant: str | None = None, only: set[str] | None = None):
         self.k, self.pool, self.variant = k, ThreadPoolExecutor(workers), variant
+        self.only = only  # conversation case ids to run; None runs all
         self.settings = load_settings()  # the default; the judge starts from it
         self.llms = build_llms(load_role_settings())  # one client per role, as in the app
         self.content = load_content()
@@ -335,12 +336,14 @@ class Runner:
 
     def suite_conversation(self):
         cases = json.loads((EVALS / "conversation_cases.json").read_text())
+        if self.only:
+            cases = [c for c in cases if c["id"] in self.only]
         before = (self.drafts, self.rejected, self.fallbacks)  # other suites also run the graph; count only these
         results = self.repeat("conversation", self.conversation_case, cases)
         drafts, rejected, fallbacks = (
             now - then for now, then in zip((self.drafts, self.rejected, self.fallbacks), before)
         )
-        passed = turns_ok = turns_n = 0
+        passed = turns_ok = turns_n = echo_ok = echo_n = 0
         for case, runs in results:
             ok_all = True
             for r in runs:
@@ -350,6 +353,15 @@ class Runner:
                     ok = sorted(turn["unlocked_after"]) == got["unlocked"]
                     turns_ok += ok
                     self.outcome("conversation.no_fallback", f"{case['id']}#{i + 1}", got["reply"] != FALLBACK["guard"])
+                    echoed = [w for w in turn.get("never_say", []) if w in got["reply"].lower()]
+                    if "never_say" in turn:
+                        echo_n += 1
+                        echo_ok += not echoed
+                        self.outcome("conversation.no_echo", f"{case['id']}#{i + 1}", not echoed)
+                    if echoed:
+                        self.fail(
+                            "conversation", f"{case['id']}#{i + 1}", f"repeated blocked text {echoed}: {got['reply']}"
+                        )
                     if not ok:
                         ok_all = run_ok = False
                         self.fail(
@@ -368,6 +380,8 @@ class Runner:
         self.metrics["conversation.guard_rejection_rate"] = ratio(rejected, drafts)
         self.metrics["conversation.fallback_rate"] = ratio(fallbacks, sum(len(c["turns"]) for c in cases) * self.k)
         self.metrics["conversation.turn_accuracy"] = ratio(turns_ok, turns_n)
+        if echo_n:
+            self.metrics["conversation.no_echo"] = ratio(echo_ok, echo_n)
 
     def opening_case(self, client_id):
         state = self.graph().invoke({"client_id": client_id}, {"configurable": {"thread_id": uuid.uuid4().hex}})
@@ -906,6 +920,7 @@ def main() -> int:
         help="parallel model calls; a local server on one GPU gains little from more (requests share the GPU)",
     )
     parser.add_argument("--write-baseline", action="store_true", help="save this run as the baseline")
+    parser.add_argument("--only", metavar="IDS", help="comma-separated conversation case ids to run")
     parser.add_argument("--ab", metavar="VARIANT", help="paired A/B: default prompts vs prompts/variants/VARIANT")
     args = parser.parse_args()
     suites = SUITES if args.suite == "all" else args.suite.split(",")
@@ -917,9 +932,11 @@ def main() -> int:
             parser.error("--write-baseline cannot be combined with --ab")
         return ab_main(args, suites)
 
-    runner, started = Runner(args.k, args.workers), time.perf_counter()
+    only = set(args.only.split(",")) if args.only else None
+    runner, started = Runner(args.k, args.workers, only=only), time.perf_counter()
     run_suites(runner, suites)
-    baseline = json.loads(BASELINE.read_text())["metrics"] if BASELINE.exists() else {}
+    # A subset run (--only) is not comparable with a full-suite baseline.
+    baseline = json.loads(BASELINE.read_text())["metrics"] if BASELINE.exists() and not only else {}
     result = summarise(runner, args, suites, time.perf_counter() - started, baseline)
     gates, regressed = result["gate_failures"], result["regressions"]
     path = save(result)
