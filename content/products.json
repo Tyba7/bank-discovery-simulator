@@ -5,6 +5,7 @@
     "category": "business_financing",
     "tags": ["sharia_compliant", "business_only", "asset_finance", "seasonal_instalments", "affordability_check"],
     "features": [
+      "Sharia-compliant: the bank's profit is agreed upfront and no interest is charged",
       "The bank buys equipment or fit-out and sells it to the business at an agreed profit",
       "Total cost is fixed and known from day one",
       "Terms from 1 to 5 years",
@@ -38,7 +39,7 @@
     "category": "savings",
     "tags": ["sharia_compliant", "flexible_access", "variable_return"],
     "features": [
-      "Profit share paid monthly instead of interest",
+      "Sharia-compliant: profit share paid monthly instead of interest",
       "Withdraw any time",
       "No minimum balance"
     ],
@@ -86,6 +87,7 @@
     "category": "everyday_banking",
     "tags": ["sharia_compliant", "international_transfers"],
     "features": [
+      "Sharia-compliant: no interest is charged or paid",
       "First 2 international transfers each month are free",
       "Fixed fee of QAR 10 per transfer after that",
       "Same-day transfers to the Philippines, India, Egypt and Pakistan"
