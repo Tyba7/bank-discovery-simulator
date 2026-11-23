@@ -126,7 +126,9 @@ def test_unchecked_claims_are_redrafted(model):
         "confirmed": ["seasonal_cash_flow", "sharia_compliance"],
         "left_out": [],
         "unconfirmed": [],
-        "feedback": "Your summary captured income, spending and cash flow, religious, ethical or other requirements.",
+        "feedback": (
+            "Your summary captured these areas: income, spending and cash flow; religious, ethical or other requirements."
+        ),
     }
 
 

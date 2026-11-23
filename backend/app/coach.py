@@ -303,7 +303,7 @@ def summary_text(content: Content, sheet: FactSheet, summary: dict, written: boo
 
     parts = []
     if summary["confirmed"]:
-        parts.append(f"Your summary captured {', '.join(label(i) for i in summary['confirmed'])}.")
+        parts.append(f"Your summary captured these areas: {'; '.join(label(i) for i in summary['confirmed'])}.")
     for i in summary["left_out"]:
         parts.append(f'It left out something the client told you at turn {by_id[i].turn}: "{by_id[i].fact}"')
     for i in summary["unconfirmed"]:
