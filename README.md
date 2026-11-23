@@ -230,12 +230,13 @@ The AI behaviour is measured with repeatable evaluations ([`backend/evals/`](bac
 
 | Suite | Cases | Measures | Gate |
 |---|---|---|---|
-| classifier | 135 | unlock precision and recall per need, on-topic, products proposed | precision ≥ 0.95, recall ≥ 0.85 |
+| classifier | 157 | unlock precision and recall per need, on-topic, products proposed; includes 22 ordinary questions that use words like "hidden" or "secret" | precision ≥ 0.95, recall ≥ 0.85 |
 | injection | 48 | attacks detected, attacks that unlocked anything | 0 unlocks |
 | holdout | 15 | a client never used for tuning (Layla), reported separately | — |
-| guard | 29 | leak, character-break and invented-fact decisions vs human labels, Cohen's κ | accuracy ≥ 0.90 |
+| guard | 35 | leak, character-break and invented-fact (including beliefs and preferences) decisions vs human labels, Cohen's κ | accuracy ≥ 0.90 |
 | conversation | 15 (82 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates | — |
 | opening | 20 | the first message never leaks | 0 leaks |
+| pitch | 24 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
 | relevance | per reply | a different-family judge checks that replies answer the question | — |
 | coach | 7 | missed needs listed, unsuitable products flagged, quotes grounded, summary labels, verdict agreement (judge) | SC-03 gates = 1.0 |
 
@@ -250,6 +251,27 @@ uv --directory backend run python -m evals.run --suite all --k 3
   failed calls). The run fails on a gate failure or a drop of more than 0.03.
 - **Tracing:** every model call is recorded with its graph node, role, tokens, cost and latency.
 - **`k`** is within-session repeatability, not a robustness estimate.
+- **A/B tests:** `--ab VARIANT` compares the current prompts with `backend/prompts/variants/VARIANT/` on the same cases
+  at the same time. It reports per-case paired results (B−A with a case-level bootstrap 95% CI, exact McNemar p) and
+  a verdict from a decision rule fixed in code. Two prompt changes were rejected this way; see
+  [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
+
+**Baseline** (`backend/evals/results/baseline.json`; hosted `qwen/qwen3.6-35b-a3b` for every role, judge
+`google/gemini-3.5-flash`, k=3, 23 Nov 2026):
+
+| Area | Result |
+|---|---|
+| Hidden-need unlocks | precision 1.00 for 5 of 6 needs; Sharia 0.947 (one product-pitch case, just under the gate); recall 1.00 except remittances 0.93 |
+| Injection | 48 attacks: all detected, none unlocked anything; 2 ordinary questions wrongly flagged ([KI-03](docs/KNOWN_ISSUES.md)) |
+| Disclosure guard | accuracy 0.962, κ 0.923, leak precision 1.00, invented-fact recall 0.86 ([KI-02](docs/KNOWN_ISSUES.md)) |
+| Conversations | all turns correct in all 3 runs: 0.867; per turn 0.931; one social-pressure attack unlocked needs in 2 of 3 runs ([KI-04](docs/KNOWN_ISSUES.md)) |
+| Client replies | relevance 1.00; sensible product reactions 0.972; 12.9% of drafts rewritten by the guard, 4.1% of turns ended on the safe fallback |
+| Openings | 0 leaks, 0 invented facts, 0 character breaks |
+| Coach | every gate 1.0 (missed needs listed, unsuitable products flagged, verdicts agree with the rules, no scores); 90% of first drafts pass all checks |
+| Time per turn | p50 7.0 s, p95 10.8 s |
+
+The same model gives different results in different sessions. Sharia precision has ranged from 0.88 to 1.00, and
+turn accuracy from 0.93 to 0.99. A single run is a sample, not a guarantee.
 
 **Tests** (no model needed):
 
