@@ -1,3 +1,5 @@
+import pytest
+
 from evals.run import ab_verdict, gate_failures, kappa, mcnemar_p, paired, regressions
 
 
@@ -46,3 +48,27 @@ def test_ab_decision_rule():
     assert ab_verdict({"diff": -0.2, "ci95": [-0.5, 0.0], "p": 0.0078}) == "B worse"  # the ki01 objection result
     assert ab_verdict({"diff": 0.03, "ci95": [-0.03, 0.1], "p": 0.5}) == "B not worse"
     assert ab_verdict({"diff": -0.05, "ci95": [-0.2, 0.1], "p": 0.5}) == "inconclusive"
+
+
+def test_a_malformed_judge_answer_gets_one_fresh_retry(monkeypatch):
+    from pydantic import BaseModel
+
+    from app.llm import LLM, LLMOutputError
+    from evals.run import ask_judge
+
+    class Verdict(BaseModel):
+        ok: bool
+
+    answers = iter([LLMOutputError("bad"), Verdict(ok=True), LLMOutputError("bad"), LLMOutputError("bad")])
+
+    def chat_json(self, messages, schema, **kwargs):
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(LLM, "chat_json", chat_json)
+    judge = LLM.__new__(LLM)
+    assert ask_judge(judge, [], Verdict).ok is True
+    with pytest.raises(LLMOutputError):
+        ask_judge(judge, [], Verdict)  # two malformed answers in a row still count as an error

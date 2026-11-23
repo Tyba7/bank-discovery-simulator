@@ -41,7 +41,7 @@ from app.interview import (
     classify_message,
     needs_unlocked_by,
 )
-from app.llm import LLM, build_llms
+from app.llm import LLM, LLMOutputError, build_llms
 from app.prompts import Prompt, variant_options
 from app.suitability import conflicts
 from app.telemetry import llm_scope
@@ -438,8 +438,7 @@ class Runner:
                 "about it); false if it says something unrelated, such as denying having other accounts when nobody "
                 "asked, misunderstands the product, or contradicts what the client may share."
             )
-            with llm_scope(role="judge"):
-                return judge.chat_json([{"role": "user", "content": user}], Reaction, max_tokens=1024)
+            return ask_judge(judge, [{"role": "user", "content": user}], Reaction)
 
         graded = self.map("pitch", grade, results)
         conflict = [(r, v) for r, v in graded if r["objection_expected"]]
@@ -496,12 +495,9 @@ class Runner:
 
         def grade(item):
             user = f"<question>\n{item['question']}\n</question>\n<reply>\n{item['reply']}\n</reply>"
-            with llm_scope(role="judge"):
-                return judge.chat_json(
-                    [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                    Relevance,
-                    max_tokens=1024,
-                )
+            return ask_judge(
+                judge, [{"role": "system", "content": system}, {"role": "user", "content": user}], Relevance
+            )
 
         graded = self.map("relevance", grade, self.replies)
         verdicts = [v for _, v in graded]
@@ -624,8 +620,7 @@ class Runner:
                 "Does the comment agree with that verdict? 'investigate' means it may fit but something must be "
                 "checked first; a comment calling it suitable but saying what to check first agrees."
             )
-            with llm_scope(role="judge"):
-                return judge.chat_json([{"role": "user", "content": user}], Agreement, max_tokens=1024)
+            return ask_judge(judge, [{"role": "user", "content": user}], Agreement)
 
         def scope(item):
             fb, missed = item
@@ -634,8 +629,7 @@ class Runner:
                 f"<feedback>\n{fb.summary['feedback']}\n</feedback>\n"
                 "Does this feedback on the student's summary criticise the summary for leaving out any of those needs?"
             )
-            with llm_scope(role="judge"):
-                return judge.chat_json([{"role": "user", "content": user}], Scope, max_tokens=1024)
+            return ask_judge(judge, [{"role": "user", "content": user}], Scope)
 
         products = [p for _, fb in notes for p in fb.products if p["comment"]]  # rules-only notes need no check
         agreed = self.map("coach", agree, products)
@@ -651,6 +645,19 @@ class Runner:
             if v.blames_missed_need:
                 self.fail("coach", fb.client_id, f"summary feedback blames missed needs {missed}: {v.reason}")
         self.metrics["coach.summary_scope_violations"] = sum(v.blames_missed_need for _, v in judged)
+
+
+def ask_judge(judge: LLM, messages: list[dict], schema: type[BaseModel]) -> BaseModel:
+    """One fresh retry after the LLM layer's own repair: a single malformed judge answer should not cost a whole run
+    its baseline. Anything else (timeouts, rate limits) is already retried by the client and still counts as an error."""
+    for attempt in (1, 2):
+        try:
+            with llm_scope(role="judge"):
+                return judge.chat_json(messages, schema, max_tokens=1024)
+        except LLMOutputError:
+            if attempt == 2:
+                raise
+    raise AssertionError("unreachable")
 
 
 def mcnemar_p(a_only: int, b_only: int) -> float:
