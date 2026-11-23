@@ -83,7 +83,7 @@ def test_public_endpoints_never_expose_hidden_information(api):
     secrets += [t for p in content.products.values() for t in p.tags] + ["hidden_needs", "unlocked"]
     sid = start(api)
     api.post(f"/api/sessions/{sid}/messages", json={"message": "Do you have any leases?"})
-    for path in ["/api/clients", "/api/products", f"/api/sessions/{sid}"]:
+    for path in ["/api/clients", "/api/products", f"/api/sessions/{sid}", f"/api/sessions/{sid}/export"]:
         text = api.get(path).text
         assert not [s for s in secrets if s in text], path
 
@@ -134,6 +134,12 @@ def test_model_down_at_start(api, model):
     model.down = True
     r = api.post("/api/sessions", json={"client_id": "maria_santos"})
     assert r.status_code == 503 and r.json()["detail"] == MODEL_DOWN
+
+
+def test_health_names_the_model_of_every_role(api):
+    assert api.get("/api/health").json()["models"] == dict.fromkeys(
+        ["classifier", "client", "guard", "coach"], "fake-model"
+    )
 
 
 def test_security_headers(api):
