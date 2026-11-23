@@ -15,3 +15,8 @@ dist/
 
 # mac
 .DS_Store
+
+# eval run history stays local; the baseline is committed
+backend/evals/results/*
+!backend/evals/results/baseline.json
+backend/logs/

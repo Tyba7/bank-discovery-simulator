@@ -6,28 +6,28 @@
   "background": "Filipino expatriate, six years in Qatar. Monthly salary QAR 12,000. Two children aged 6 and 9 living with her in Doha.",
   "stated_goal": "Wants to open a savings account.",
   "personality": "Polite, warm and a little cautious. Answers fully but does not volunteer personal worries unless the adviser shows interest in her family or plans.",
+  "tags": ["salaried"],
   "hidden_needs": [
     {
       "id": "education_goal",
+      "category": "objectives",
+      "tags": ["education_goal"],
       "topic": "long-term goals, children's future, or what the savings are for",
-      "fact": "She wants to pay for both children's university studies, starting in about 9 years.",
-      "suitable_products": ["education_savings_plan"]
+      "fact": "She wants to pay for both children's university studies, starting in about 9 years."
     },
     {
       "id": "family_remittances",
+      "category": "financial_situation",
+      "tags": ["sends_money_abroad"],
       "topic": "regular payments, family abroad, or sending money overseas",
-      "fact": "She sends QAR 3,000 every month to her parents in Manila and pays high transfer fees.",
-      "suitable_products": ["global_transfer_account"]
+      "fact": "She sends QAR 3,000 every month to her parents in Manila and pays high transfer fees."
     },
     {
       "id": "low_risk_tolerance",
+      "category": "risk_tolerance",
+      "tags": ["no_capital_risk"],
       "topic": "attitude to risk, investment experience, or past financial losses",
-      "fact": "She lost QAR 15,000 in an online investment scheme two years ago and now wants no risk to her savings.",
-      "suitable_products": ["education_savings_plan"]
+      "fact": "She lost QAR 15,000 in an online investment scheme two years ago and now wants no risk to her savings."
     }
-  ],
-  "unsuitable_products": [
-    {"product_id": "equity_growth_fund", "reason": "Capital is at risk, which conflicts with her low risk tolerance."},
-    {"product_id": "business_overdraft", "reason": "She has no business and no borrowing need."}
   ]
 }

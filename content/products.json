@@ -2,8 +2,8 @@
   {
     "id": "murabaha_business_finance",
     "name": "Murabaha Business Finance",
-    "category": "business financing",
-    "sharia_compliant": true,
+    "category": "business_financing",
+    "tags": ["sharia_compliant", "business_only", "asset_finance", "seasonal_instalments", "affordability_check"],
     "features": [
       "The bank buys equipment or fit-out and sells it to the business at an agreed profit",
       "Total cost is fixed and known from day one",
@@ -19,8 +19,8 @@
   {
     "id": "business_overdraft",
     "name": "Business Overdraft",
-    "category": "business financing",
-    "sharia_compliant": false,
+    "category": "business_financing",
+    "tags": ["interest_bearing", "business_only", "flexible_credit", "affordability_check"],
     "features": [
       "Draw cash any time up to an agreed limit",
       "Pay only for the amount used",
@@ -36,7 +36,7 @@
     "id": "islamic_savings_account",
     "name": "Islamic Savings Account (Mudaraba)",
     "category": "savings",
-    "sharia_compliant": true,
+    "tags": ["sharia_compliant", "flexible_access", "variable_return"],
     "features": [
       "Profit share paid monthly instead of interest",
       "Withdraw any time",
@@ -51,7 +51,7 @@
     "id": "education_savings_plan",
     "name": "Education Savings Plan",
     "category": "savings",
-    "sharia_compliant": false,
+    "tags": ["interest_bearing", "guaranteed_return", "capital_protected", "fixed_monthly_deposit", "early_withdrawal_penalty", "education_purpose"],
     "features": [
       "Fixed monthly deposit from QAR 500",
       "Guaranteed return of 3.5% a year",
@@ -68,7 +68,7 @@
     "id": "equity_growth_fund",
     "name": "Equity Growth Fund",
     "category": "investment",
-    "sharia_compliant": false,
+    "tags": ["capital_at_risk", "long_horizon"],
     "features": [
       "Invests in global company shares",
       "Higher potential long-term return",
@@ -83,8 +83,8 @@
   {
     "id": "global_transfer_account",
     "name": "Global Transfer Account",
-    "category": "everyday banking",
-    "sharia_compliant": true,
+    "category": "everyday_banking",
+    "tags": ["sharia_compliant", "international_transfers"],
     "features": [
       "First 2 international transfers each month are free",
       "Fixed fee of QAR 10 per transfer after that",

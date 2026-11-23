@@ -1,0 +1,51 @@
+{
+  "need_categories": {
+    "objectives": "What the client wants to achieve",
+    "financial_situation": "Income, spending and cash flow",
+    "commitments": "Existing debts, leases and other obligations",
+    "risk_tolerance": "How much risk the client can accept",
+    "knowledge_experience": "What the client knows about financial products",
+    "preferences": "Religious, ethical or other requirements"
+  },
+  "product_categories": {
+    "business_financing": "Business financing",
+    "savings": "Savings",
+    "investment": "Investment",
+    "everyday_banking": "Everyday banking"
+  },
+  "client_tags": {
+    "business_owner": "Owns a trading business",
+    "salaried": "Employed on a monthly salary",
+    "self_employed": "Works for themselves, without a trading business"
+  },
+  "need_tags": {
+    "requires_sharia": "Accepts only Sharia-compliant products",
+    "seasonal_revenue": "Business income rises and falls with the seasons",
+    "irregular_income": "Personal income changes a lot from month to month",
+    "existing_debt": "Already repaying a loan or lease",
+    "education_goal": "Saving for school or university fees",
+    "short_term_goal": "Needs the money within about two years",
+    "sends_money_abroad": "Sends money overseas regularly",
+    "no_capital_risk": "Wants no risk to the money saved",
+    "no_investment_experience": "Has never invested"
+  },
+  "product_tags": {
+    "sharia_compliant": "Follows Islamic finance rules; no interest",
+    "interest_bearing": "Pays or charges interest",
+    "business_only": "Only for businesses",
+    "asset_finance": "Finances specific assets, not general cash",
+    "flexible_credit": "Borrow any time up to a limit",
+    "affordability_check": "Lending that depends on the client's existing debts",
+    "seasonal_instalments": "Instalments can be lowered in a slow season",
+    "flexible_access": "Money can be paid in and taken out any time",
+    "variable_return": "The return is expected, not guaranteed",
+    "guaranteed_return": "The return is fixed and guaranteed",
+    "capital_protected": "The amount paid in cannot fall",
+    "capital_at_risk": "The value can fall",
+    "long_horizon": "Meant to be held for 7 years or more",
+    "fixed_monthly_deposit": "A fixed amount must be paid in every month",
+    "early_withdrawal_penalty": "Taking money out early loses benefits",
+    "education_purpose": "Built to pay school or university fees",
+    "international_transfers": "Sends money abroad cheaply"
+  }
+}
