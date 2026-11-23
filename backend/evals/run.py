@@ -374,8 +374,8 @@ class Runner:
             replace(
                 self.settings,
                 llm_model=model,
-                llm_base_url=os.environ.get("JUDGE_BASE_URL", self.settings.llm_base_url),
-                llm_api_key=os.environ.get("JUDGE_API_KEY", self.settings.llm_api_key),
+                llm_base_url=os.environ.get("JUDGE_BASE_URL") or self.settings.llm_base_url,
+                llm_api_key=os.environ.get("JUDGE_API_KEY") or self.settings.llm_api_key,
                 llm_extra_body={},
             )
         )
