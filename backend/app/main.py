@@ -9,10 +9,12 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, Field
 
@@ -27,6 +29,9 @@ from app.sessions import Session, SessionStore
 log = logging.getLogger(__name__)
 
 MAX_TURNS = 40
+FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"  # built by `npm run build`
+# Same-origin only. The API docs (/docs) load their own scripts from a CDN, so they are left out.
+CSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'"
 MODEL_DOWN = "The AI service is not responding right now. Please wait a moment and try again."
 
 
@@ -126,6 +131,8 @@ def create_app(llm: LLM | None = None, content: Content | None = None) -> FastAP
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
+        if not request.url.path.startswith(("/docs", "/redoc", "/openapi")):
+            response.headers["Content-Security-Policy"] = CSP
         return response
 
     @app.exception_handler(Exception)
@@ -259,6 +266,8 @@ def create_app(llm: LLM | None = None, content: Content | None = None) -> FastAP
         filename = f"interview-{session.client_id}-{session.id[:8]}.json"
         return JSONResponse(body, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
+    if FRONTEND.is_dir():  # one process serves the API and the built web UI; mounted last so /api wins
+        app.mount("/", StaticFiles(directory=FRONTEND, html=True), name="frontend")
     return app
 
 
