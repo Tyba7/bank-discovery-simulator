@@ -137,12 +137,19 @@ def fact_sheet(content: Content, client: Client, state: dict, submission: Submis
                     proposed.get(p.id, []),
                     a.verdict,
                     a.outcome,
-                    sorted({m.rule.reason for m in a.matches if m.rule.verdict in (a.verdict, "investigate")}),
+                    reasons_for(a),
                     a.missed,
                 )
             )
     flag = check_input(submission.summary)[1] if submission.summary.strip() else None
     return FactSheet(client, needs, products, student_turns, question_types, flag)
+
+
+def reasons_for(a) -> list[str]:
+    """The reasons behind the verdict first; checks still to do only matter when the product is not ruled out."""
+    deciding = [m.rule.reason for m in a.matches if m.rule.verdict == a.verdict]
+    checks = [m.rule.reason for m in a.matches if m.rule.verdict == "investigate" and a.verdict != "unsuitable"]
+    return list(dict.fromkeys(deciding + checks))
 
 
 def feedback_model(sheet: FactSheet) -> type[BaseModel]:

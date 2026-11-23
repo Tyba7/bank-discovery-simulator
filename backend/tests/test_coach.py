@@ -113,6 +113,11 @@ def test_facts_come_from_the_interview_and_the_rules():
     assert products["murabaha_business_finance"] == (True, "investigate", ["existing_lease"])  # R14 not checked
     assert products["islamic_savings_account"][:2] == (False, "suitable")  # a fit the student did not name
     assert sheet.question_types == {"open": 1, "closed": 1}
+    reasons = {p.id: p.reasons for p in sheet.products}
+    assert reasons["business_overdraft"] == [
+        "Not Sharia-compliant, and the client accepts only Sharia-compliant products."
+    ]  # an unsuitable product gets only the reasons that rule it out
+    assert reasons["murabaha_business_finance"][-1].startswith("Existing debts")  # the check comes after the fit
 
 
 def test_unchecked_claims_are_redrafted(model):
