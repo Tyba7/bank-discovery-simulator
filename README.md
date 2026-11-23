@@ -266,22 +266,22 @@ uv --directory backend run python -m evals.run --suite all --k 3
   a verdict from a decision rule fixed in code. Two prompt changes were rejected this way; see
   [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
 
-**Baseline** (`backend/evals/results/baseline.json`; hosted `qwen/qwen3.6-35b-a3b` for every role, judge
-`google/gemini-3.5-flash`, k=3, 23 Nov 2026):
+**Baseline** (`backend/evals/results/baseline.json`; Qwen `qwen/qwen3.6-35b-a3b` through the Nous Portal API for every
+role, judge `google/gemini-3.5-flash`, k=3, commit `0a34b3a`, 23 Nov 2026):
 
 | Area | Result |
 |---|---|
-| Hidden-need unlocks | precision 1.00 for 5 of 6 needs; Sharia 0.947 (one product-pitch case, just under the gate); recall 1.00 except remittances 0.93 |
-| Injection | 48 attacks: all detected, none unlocked anything; 2 ordinary questions wrongly flagged ([KI-03](docs/KNOWN_ISSUES.md)) |
-| Disclosure guard | accuracy 0.962, κ 0.923, leak precision 1.00, invented-fact recall 0.86 ([KI-02](docs/KNOWN_ISSUES.md)) |
-| Conversations | all turns correct in all 3 runs: 0.867; per turn 0.931; one social-pressure attack unlocked needs in 2 of 3 runs ([KI-04](docs/KNOWN_ISSUES.md)) |
-| Client replies | relevance 1.00; sensible product reactions 0.972; 12.9% of drafts rewritten by the guard, 4.1% of turns ended on the safe fallback |
+| Hidden-need unlocks | precision 1.00 for 4 of 6 needs, seasonal cash flow 0.975, Sharia 0.964; recall 1.00 except remittances 0.96 |
+| Injection | 48 attacks: none unlocked anything, 98.6% detected; 3 ordinary questions wrongly flagged ([KI-03](docs/KNOWN_ISSUES.md)) |
+| Disclosure guard | accuracy 0.962, κ 0.923, leak precision 1.00, leak recall 0.97, invented-fact recall 0.86 ([KI-02](docs/KNOWN_ISSUES.md)) |
+| Conversations | per turn 0.975; all turns correct in all 3 runs 0.875; the client never repeated blocked text |
+| Client replies | relevance 0.97 (the judge counts in-character refusals of attacks as "not relevant"); sensible product reactions 0.958; 12.3% of drafts rewritten by the guard, 5.0% of turns ended on the safe fallback |
 | Openings | 0 leaks, 0 invented facts, 0 character breaks |
-| Coach | every gate 1.0 (missed needs listed, unsuitable products flagged, verdicts agree with the rules, no scores); 90% of first drafts pass all checks |
-| Time per turn | p50 7.0 s, p95 10.8 s |
+| Coach | every gate met (missed needs listed, unsuitable products flagged, verdicts agree with the rules 0.98, no scores); 95% of first drafts pass all checks |
+| Time per turn | p50 6.8 s, p95 11.0 s |
 
 The same model gives different results in different sessions. Sharia precision has ranged from 0.88 to 1.00, and
-turn accuracy from 0.93 to 0.99. A single run is a sample, not a guarantee.
+turn accuracy from 0.93 to 0.996. A full run takes about 14 minutes with `--workers 8`. A single run is a sample, not a guarantee.
 
 ### How cases are labelled
 
