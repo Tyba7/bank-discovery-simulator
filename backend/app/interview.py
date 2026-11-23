@@ -2,8 +2,9 @@ import logging
 import operator
 import time
 from collections.abc import Mapping
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, NamedTuple, TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, create_model
@@ -13,6 +14,7 @@ from app.content import Client, Content
 from app.llm import LLM
 from app.prompts import Prompt
 from app.suitability import conflicts
+from app.telemetry import llm_scope
 
 log = logging.getLogger(__name__)
 
@@ -66,12 +68,20 @@ class InterviewState(TypedDict, total=False):
     attempts: int
 
 
+def list_of(ids: list[str]):
+    """A list[Literal[...]] built at runtime from content ids, so the model can only answer with known ids.
+
+    Static checkers want Literal values written in the source; these come from content files.
+    """
+    return list[Literal[tuple(ids)]]  # pyright: ignore[reportInvalidTypeForm]
+
+
 def classification_model(client: Client, product_ids: list[str]) -> type[BaseModel]:
     return create_model(
         "Classification",
         reason=(str, ...),
-        unlocks=(list[Literal[tuple(n.id for n in client.hidden_needs)]], ...),
-        products_proposed=(list[Literal[tuple(product_ids)]], ...),
+        unlocks=(list_of([n.id for n in client.hidden_needs]), ...),
+        products_proposed=(list_of(product_ids), ...),
         on_topic=(bool, ...),
         injection_attempt=(bool, ...),
         question_type=(Literal["open", "closed", "statement"], ...),
@@ -79,7 +89,7 @@ def classification_model(client: Client, product_ids: list[str]) -> type[BaseMod
 
 
 def guard_model(locked_ids: list[str]) -> type[BaseModel]:
-    leaked = list[Literal[tuple(locked_ids)]] if locked_ids else list[str]
+    leaked = list_of(locked_ids) if locked_ids else list[str]
     return create_model(
         "GuardVerdict",
         reason=(str, ...),
@@ -103,24 +113,89 @@ def client_system_prompt(prompt: Prompt, client: Client, unlocked: set[str], not
     )
 
 
+def classify_message(content: Content, llm: LLM, prompt: Prompt, client: Client, transcript, message: str) -> dict:
+    """One classifier call. Shared by the graph and the eval runner so evals test the production path."""
+    products = "\n".join(f"- {p.id}: {p.name} [{', '.join(p.tags)}]" for p in content.products.values())
+    system = prompt.render(needs="\n".join(f"- {n.id}: {n.topic}" for n in client.hidden_needs), products=products)
+    history = "\n".join(
+        f"{'Adviser' if t['role'] == 'student' else 'Client'}: {fence(t['content'])}"
+        for t in transcript[-HISTORY_MESSAGES:]
+    )
+    user = (
+        f"<conversation>\n{history or '(start of interview)'}\n</conversation>\n<message>\n{fence(message)}\n</message>"
+    )
+    schema = classification_model(client, list(content.products))
+    with llm_scope(role="classifier", prompt=prompt.version):
+        result = llm.chat_json([{"role": "system", "content": system}, {"role": "user", "content": user}], schema)
+    return result.model_dump()
+
+
+def needs_unlocked_by(content: Content, client: Client, classification: dict) -> set[str]:
+    if classification["injection_attempt"]:  # an injection turn unlocks nothing
+        return set()
+    proposed = (conflicts(content, client, content.products[p]) for p in classification["products_proposed"])
+    return set(classification["unlocks"]).union(*proposed)
+
+
+class ReplyCheck(NamedTuple):
+    verdict: BaseModel
+    leaked: list[str]
+    number_leak: bool
+    new_number: bool
+
+
+def check_reply(
+    content: Content,
+    llm: LLM,
+    prompt: Prompt,
+    client: Client,
+    unlocked: set[str],
+    student_words: str,
+    message: str,
+    draft: str,
+) -> ReplyCheck:
+    """Numbers compared in code, then an LLM judge restricted to the locked need ids."""
+    shared = [n for n in client.hidden_needs if n.id in unlocked]
+    locked = [n for n in client.hidden_needs if n.id not in unlocked]
+    public = f"{client.occupation} {client.background} {client.stated_goal}"
+    catalogue = " ".join(" ".join([p.name, *p.features, *p.limitations]) for p in content.products.values())
+    allowed = " ".join([public, *(n.fact for n in shared), catalogue, student_words, message])
+    number_leak, new_number = check_numbers(draft, allowed, " ".join(n.fact for n in locked))
+    system = prompt.render(
+        public=public,
+        unlocked_facts="\n".join(f"- {n.id}: {n.fact}" for n in shared) or "(none)",
+        locked_facts="\n".join(f"- {n.id}: {n.fact}" for n in locked) or "(none)",
+    )
+    user = f"<question>\n{fence(message)}\n</question>\n<reply>\n{fence(draft)}\n</reply>"
+    with llm_scope(role="guard", prompt=prompt.version):
+        verdict = llm.chat_json(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            guard_model([n.id for n in locked]),
+        )
+    leaked = sorted(set(verdict.leaked_need_ids) & {n.id for n in locked})
+    return ReplyCheck(verdict, leaked, number_leak, new_number)
+
+
 def turn_number(state) -> int:
     return sum(t["role"] == "student" for t in state.get("transcript", [])) + 1
 
 
 def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointer=None):
     classifier_prompt, client_prompt, guard_prompt = Prompt("classifier"), Prompt("client"), Prompt("guard")
-    products_text = "\n".join(f"- {p.id}: {p.name} [{', '.join(p.tags)}]" for p in content.products.values())
-    catalogue = " ".join(" ".join([p.name, *p.features, *p.limitations]) for p in content.products.values())
 
     def event(state, code, detail):
         return {"code": code, "turn": turn_number(state), "detail": detail}
 
     def traced(name, node):
-        def run(state):
-            start = time.perf_counter()
-            update = node(state)
-            entry = {"turn": turn_number(state), "node": name, "ms": round((time.perf_counter() - start) * 1000)}
+        def run(state, config: RunnableConfig):
+            turn, start = turn_number(state), time.perf_counter()
+            session = config.get("configurable", {}).get("thread_id")
+            with llm_scope(node=name, turn=turn, session=session) as calls:
+                update = node(state)
+            entry = {"turn": turn, "node": name, "ms": round((time.perf_counter() - start) * 1000)}
             entry.update(update.pop("_detail", {}))
+            if calls:  # labels already on the trace entry are not repeated per call
+                entry["llm"] = [{k: v for k, v in c.items() if k not in ("node", "turn", "session")} for c in calls]
             return {**update, "trace": [entry]}
 
         return run
@@ -131,7 +206,8 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             {"role": "system", "content": client_system_prompt(client_prompt, client, set(), OPENING_NOTE)},
             {"role": "user", "content": GREETING},
         ]
-        reply = llms["client"].chat(messages, max_tokens=150)
+        with llm_scope(role="client", prompt=client_prompt.version):
+            reply = llms["client"].chat(messages, max_tokens=150)
         return {
             "transcript": [{"role": "client", "content": reply}],
             "unlocked": [],
@@ -151,22 +227,9 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
 
     def classify(state):
         client = content.clients[state["client_id"]]
-        system = classifier_prompt.render(
-            needs="\n".join(f"- {n.id}: {n.topic}" for n in client.hidden_needs), products=products_text
-        )
-        history = "\n".join(
-            f"{'Adviser' if t['role'] == 'student' else 'Client'}: {fence(t['content'])}"
-            for t in state["transcript"][-HISTORY_MESSAGES:]
-        )
-        user = f"<conversation>\n{history}\n</conversation>\n<message>\n{fence(state['message'])}\n</message>"
         try:
-            result = (
-                llms["classifier"]
-                .chat_json(
-                    [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                    classification_model(client, list(content.products)),
-                )
-                .model_dump()
+            result = classify_message(
+                content, llms["classifier"], classifier_prompt, client, state["transcript"], state["message"]
             )
         except Exception as e:  # fail closed: a broken classifier never unlocks anything
             log.exception("classifier failed")
@@ -183,11 +246,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         }
 
     def update_unlocked(state):
-        client, c = content.clients[state["client_id"]], state["classification"]
-        new = set()
-        if not c["injection_attempt"]:  # an injection turn unlocks nothing
-            proposed = (conflicts(content, client, content.products[p]) for p in c["products_proposed"])
-            new = set(c["unlocks"]).union(*proposed)
+        new = needs_unlocked_by(content, content.clients[state["client_id"]], state["classification"])
         added = sorted(new - set(state["unlocked"]))
         return {"unlocked": sorted(set(state["unlocked"]) | new), "_detail": {"added": added}}
 
@@ -207,31 +266,27 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         ]
         messages.append({"role": "user", "content": fence(state["message"])})
         attempt = state["attempts"] + 1
+        with llm_scope(role="client", prompt=client_prompt.version):
+            draft = llms["client"].chat(messages, max_tokens=200)
         return {
-            "draft": llms["client"].chat(messages, max_tokens=200),
+            "draft": draft,
             "attempts": attempt,
             "_detail": {"prompt": client_prompt.version, "attempt": attempt},
         }
 
     def guard(state):
         client = content.clients[state["client_id"]]
-        unlocked = set(state["unlocked"])
-        shared = [n for n in client.hidden_needs if n.id in unlocked]
-        locked = [n for n in client.hidden_needs if n.id not in unlocked]
-        public = f"{client.occupation} {client.background} {client.stated_goal}"
         student_words = " ".join(t["content"] for t in state["transcript"] if t["role"] == "student")
-        allowed = " ".join([public, *(n.fact for n in shared), catalogue, student_words, state["message"]])
-        number_leak, new_number = check_numbers(state["draft"], allowed, " ".join(n.fact for n in locked))
-        system = guard_prompt.render(
-            public=public,
-            unlocked_facts="\n".join(f"- {n.id}: {n.fact}" for n in shared) or "(none)",
-            locked_facts="\n".join(f"- {n.id}: {n.fact}" for n in locked) or "(none)",
-        )
-        user = f"<question>\n{fence(state['message'])}\n</question>\n<reply>\n{fence(state['draft'])}\n</reply>"
         try:
-            verdict = llms["guard"].chat_json(
-                [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                guard_model([n.id for n in locked]),
+            verdict, leaked, number_leak, new_number = check_reply(
+                content,
+                llms["guard"],
+                guard_prompt,
+                client,
+                set(state["unlocked"]),
+                student_words,
+                state["message"],
+                state["draft"],
             )
         except Exception as e:  # fail closed: an unchecked reply is never shown
             log.exception("guard failed")
@@ -241,7 +296,6 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 "events": [event(state, "GRD-001", type(e).__name__)],
                 "_detail": {"error": type(e).__name__},
             }
-        leaked = sorted(set(verdict.leaked_need_ids) & {n.id for n in locked})
         problems, events = [], []
         if leaked or number_leak:
             problems.append("it revealed something the adviser has not asked about")
