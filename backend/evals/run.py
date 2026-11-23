@@ -900,7 +900,10 @@ def main() -> int:
     )
     parser.add_argument("--k", type=int, default=3, help="runs per case")
     parser.add_argument(
-        "--workers", type=int, default=1, help="parallel model calls; a local llama.cpp server with one slot needs 1"
+        "--workers",
+        type=int,
+        default=1,
+        help="parallel model calls; a local server on one GPU gains little from more (requests share the GPU)",
     )
     parser.add_argument("--write-baseline", action="store_true", help="save this run as the baseline")
     parser.add_argument("--ab", metavar="VARIANT", help="paired A/B: default prompts vs prompts/variants/VARIANT")

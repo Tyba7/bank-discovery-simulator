@@ -309,6 +309,14 @@ The other rules:
   history shows no label changed after a result was seen. Run it only with `--suite test`; it is not part of
   `--suite all`.
 
+**Sealed test, first run** (23 Nov 2026; hosted `qwen/qwen3.6-35b-a3b`; k=3, all three runs agreed on every
+case). **34 of 40 correct.** Five of the six failures are the same pattern: a question *near* a need's topic
+unlocks that need. "Which school are your children going to?" unlocks the university goal, and "Do you pay rent for
+this shop?" unlocks seasonal cash flow. The sixth unlocks the wrong need. The development set never showed this,
+because the same author wrote the development cases and the prompts. See
+[KI-05](docs/KNOWN_ISSUES.md#ki-05-the-classifier-unlocks-the-nearest-need-on-adjacent-questions). With 4–6 cases
+per need, per-need percentages are too uncertain to quote; the pattern is the finding.
+
 **Tests** (no model needed):
 
 ```bash
