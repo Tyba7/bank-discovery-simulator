@@ -50,6 +50,7 @@ EVALS = Path(__file__).resolve().parent
 RESULTS = EVALS / "results"
 BASELINE = RESULTS / "baseline.json"
 SUITES = ["classifier", "injection", "holdout", "guard", "conversation", "opening", "pitch", "relevance", "coach"]
+SEALED = ["test"]  # run only when named: never part of --suite all, never in gates, regressions or the baseline
 OPENINGS_PER_CLIENT = 10
 MAX_REGRESSION = 0.03
 LOWER_IS_BETTER = (
@@ -225,6 +226,11 @@ class Runner:
         )
         flagged = sum(r["injection_attempt"] for _, runs in results for r in runs)
         self.metrics["injection.false_flags"] = flagged  # legitimate questions treated as attacks
+
+    def suite_test(self):
+        self.unlock_metrics(
+            "test", self.repeat("test", self.classify_case, rows(EVALS / "test" / "classifier_cases.jsonl"))
+        )
 
     def suite_holdout(self):
         self.unlock_metrics(
@@ -782,7 +788,8 @@ def run_suites(runner: Runner, suites: list[str], label: str = "") -> None:
 def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline: dict) -> dict:
     metrics = runner.metrics
     holdout = {k: v for k, v in metrics.items() if k.startswith("holdout.")}
-    dev = {k: v for k, v in metrics.items() if k not in holdout}
+    sealed = {k: v for k, v in metrics.items() if k.startswith("test.")}
+    dev = {k: v for k, v in metrics.items() if k not in holdout and k not in sealed}
     latency = {
         name: {"p50": percentile(v, 50), "p95": percentile(v, 95), "n": len(v)} for name, v in runner.latency.items()
     }
@@ -801,6 +808,7 @@ def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline:
         "seconds": round(seconds),
         "metrics": dev,
         "holdout": holdout,
+        "sealed_test": sealed,
         "latency_ms": latency,
         "failure_codes": dict(runner.events),
         "llm_usage": llm_usage(runner.calls),
@@ -887,16 +895,21 @@ def ab_main(args, suites: list[str]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--suite", default="all", help=f"comma-separated: {', '.join(SUITES)}, or all")
+    parser.add_argument(
+        "--suite", default="all", help=f"comma-separated: {', '.join(SUITES + SEALED)}, or all (excludes test)"
+    )
     parser.add_argument("--k", type=int, default=3, help="runs per case")
     parser.add_argument(
-        "--workers", type=int, default=1, help="parallel model calls; a local llama.cpp server with one slot needs 1"
+        "--workers",
+        type=int,
+        default=1,
+        help="parallel model calls; a local server on one GPU gains little from more (requests share the GPU)",
     )
     parser.add_argument("--write-baseline", action="store_true", help="save this run as the baseline")
     parser.add_argument("--ab", metavar="VARIANT", help="paired A/B: default prompts vs prompts/variants/VARIANT")
     args = parser.parse_args()
     suites = SUITES if args.suite == "all" else args.suite.split(",")
-    if unknown := set(suites) - set(SUITES):
+    if unknown := set(suites) - set(SUITES + SEALED):
         parser.error(f"unknown suite {sorted(unknown)}")
     logging.basicConfig(level=logging.WARNING)
     if args.ab:
@@ -925,6 +938,10 @@ def main() -> int:
     if holdout:
         print("\nholdout metrics (reported separately, never used for tuning):")
         for name, value in holdout.items():
+            print(f"  {name:48} {value}")
+    if result["sealed_test"]:
+        print("\nsealed test metrics (run rarely; never in gates or the baseline):")
+        for name, value in result["sealed_test"].items():
             print(f"  {name:48} {value}")
     print("\nlatency ms (p50 / p95):")
     for name, v in sorted(latency.items()):

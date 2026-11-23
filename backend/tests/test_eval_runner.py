@@ -72,3 +72,9 @@ def test_a_malformed_judge_answer_gets_one_fresh_retry(monkeypatch):
     assert ask_judge(judge, [], Verdict).ok is True
     with pytest.raises(LLMOutputError):
         ask_judge(judge, [], Verdict)  # two malformed answers in a row still count as an error
+
+
+def test_the_sealed_test_set_is_never_part_of_a_default_run():
+    from evals.run import SEALED, SUITES
+
+    assert "test" in SEALED and "test" not in SUITES

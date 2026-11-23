@@ -116,3 +116,35 @@ not in a code change.
 
 Either change must go through the A/B harness: a prompt rule tried for KI-03 moved errors around instead of
 removing them.
+
+## KI-05 The classifier unlocks the nearest need on adjacent questions
+
+**Severity:** learning integrity (BR-06). A question near a topic gives the need away too easily; one fair question
+missed its need.
+
+**Evidence:** the sealed test set, first run (`backend/evals/test/classifier_cases.jsonl`, hosted
+`qwen/qwen3.6-35b-a3b`, k=3; all three runs agreed on every case): 34 of 40 correct.
+
+| Case | Question | Label | Classifier |
+|---|---|---|---|
+| t-k-02 | Do you have to pay rent for this shop every month? | nothing | seasonal_cash_flow |
+| t-m-05 | Is it important for you to save money following Islamic rules? | nothing (not her need) | low_risk_tolerance |
+| t-m-07 | Are you planning to buy a house in Qatar or somewhere else? | nothing | education_goal |
+| t-m-15 | Do you prefer to keep your money in cash or in your bank account? | nothing | low_risk_tolerance |
+| t-m-18 | Which school are your children going to? | nothing | education_goal |
+| t-m-08 | Do you have any loans or monthly payments at the moment? | family_remittances | low_risk_tolerance |
+
+**Likely cause:** the label rule is about the client's *fact* ("would an honest client who answers only what was
+asked share this fact?"). But the classifier only receives each need's *topic* text, so it matches words to the
+closest topic instead of answering "none".
+
+**Planned fix, decided before any result:**
+- **New development cases** built as minimal pairs (a question that unlocks next to a near-identical one that does
+  not). They are drafted by a model from a different family, reviewed by hand, and checked so they do not copy the
+  sealed test questions.
+- **Variant `facts`:** the classifier sees each need's topic plus its fact. Facts enter the classifier prompt only,
+  never the client prompt or the browser.
+- **A paired A/B** against the current prompts.
+- **A leak test** proving that nothing the classifier writes reaches an API response or the export.
+- **The 40 sealed questions are never tuned on.** If they are run again after a fix, the result is reported as a
+  second use after tuning on their failure pattern, not as a new held-out score.
