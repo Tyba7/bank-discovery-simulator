@@ -31,7 +31,9 @@ cd bank-discovery-simulator
    cp backend/.env.example backend/.env
    ```
 
-   Edit `backend/.env` and set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` (see [AI configuration](#ai-configuration)).
+   The example is set up for the tested model, Qwen3.6-35B-A3B on a local llama.cpp server at port 8080. For
+   another server or a hosted provider, edit `backend/.env` and set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` and
+   `LLM_EXTRA_BODY` (see [AI configuration](#ai-configuration)).
 
 2. Build the web interface:
 
