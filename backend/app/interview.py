@@ -66,8 +66,10 @@ class Turn(TypedDict):
 class InterviewState(TypedDict, total=False):
     client_id: str
     transcript: Annotated[list[Turn], operator.add]
-    unlocked: list[str]  # needs the student has been told about; saved only when a turn's reply is shown
+    unlocked: list[str]  # needs the student's questions earned: the client may share them. Saved when a reply is shown
+    told: list[str]  # needs the client actually stated in a shown reply (guard evidence); the coach credits only these
     pending: list[str]  # needs this turn's question earned: the draft may share them, saved in finish on success
+    revealed: list[str]  # allowed needs the last checked draft states; saved into told when that draft is shown
     events: Annotated[list[dict], operator.add]  # failure-registry codes with turn numbers
     trace: Annotated[list[dict], operator.add]  # one entry per node run: timing, outputs, prompt version
     student_message: str  # raw input for this turn
@@ -301,6 +303,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         return {
             "transcript": [{"role": "client", "content": reply}],
             "unlocked": [],
+            "told": [],
             "events": [],
             "_detail": {"prompt": client_prompt.version},
         }
@@ -312,6 +315,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "input_flag": flag,
             "reply_flag": None,
             "pending": [],
+            "revealed": [],
             "problems": [],
             "attempts": 0,
             "_detail": {"flag": flag},
@@ -415,6 +419,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             return {
                 "problems": ["the check could not run"],
                 "attempts": MAX_REPLY_ATTEMPTS,
+                "revealed": [],
                 "events": [event(state, "GRD-001", type(e).__name__)],
                 "_detail": {"error": type(e).__name__},
             }
@@ -428,8 +433,11 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         if verdict.invented_fact or new_number:
             problems.append("it stated a fact or amount that is not in your profile")
             events.append(event(state, "CLI-003", verdict.reason if verdict.invented_fact else "number"))
+        # What this draft actually tells the student: an earned need counts as found only once the client says it.
+        revealed = sorted(set(verdict.revealed_need_ids) & allowed(state))
         detail = {
             "prompt": guard_prompt.version,
+            "revealed": revealed,
             "leaked": leaked,
             "number_leak": number_leak,
             "new_number": new_number,
@@ -437,7 +445,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "invented_fact": verdict.invented_fact,
             "reason": verdict.reason,
         }
-        return {"problems": problems, "events": events, "_detail": detail}
+        return {"problems": problems, "events": events, "revealed": revealed, "_detail": detail}
 
     def after_guard(state):
         if not state["problems"]:
@@ -461,7 +469,14 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         if state.get("reply_flag"):  # the student was asked to rephrase, so nothing was told: the unlock is not kept
             return {"transcript": [student, client], "pending": [], "_detail": {"added": [], "discarded": pending}}
         unlocked = sorted(set(state["unlocked"]) | set(pending))
-        return {"transcript": [student, client], "unlocked": unlocked, "pending": [], "_detail": {"added": pending}}
+        told_now = sorted(set(state.get("revealed", [])) - set(state.get("told", [])))
+        return {
+            "transcript": [student, client],
+            "unlocked": unlocked,
+            "told": sorted(set(state.get("told", [])) | set(told_now)),
+            "pending": [],
+            "_detail": {"added": pending, "told": told_now},
+        }
 
     graph = StateGraph(InterviewState)
     nodes = {

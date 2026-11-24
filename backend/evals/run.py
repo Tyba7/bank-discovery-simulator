@@ -346,7 +346,13 @@ class Runner:
             start = time.perf_counter()
             state = graph.invoke({"student_message": turn["student"]}, config)
             self.latency.setdefault("turn", []).append((time.perf_counter() - start) * 1000)
-            turns.append({"unlocked": state["unlocked"], "reply": state["transcript"][-1]["content"]})
+            turns.append(
+                {
+                    "unlocked": state["unlocked"],
+                    "told": state.get("told", []),
+                    "reply": state["transcript"][-1]["content"],
+                }
+            )
         self.collect(state)
         return turns
 
@@ -396,6 +402,12 @@ class Runner:
         self.metrics["conversation.guard_rejection_rate"] = ratio(rejected, drafts)
         self.metrics["conversation.fallback_rate"] = ratio(fallbacks, sum(len(c["turns"]) for c in cases) * self.k)
         self.metrics["conversation.turn_accuracy"] = ratio(turns_ok, turns_n)
+        # Of the needs the student's questions earned, how many the client actually stated (the coach credits only
+        # those). Not gated: it measures the client's sharing, not the unlock decision.
+        ends = [r[-1] for _, runs in results for r in runs if r]
+        self.metrics["conversation.told_of_earned"] = ratio(
+            sum(len(set(e["told"]) & set(e["unlocked"])) for e in ends), sum(len(e["unlocked"]) for e in ends)
+        )
         if echo_n:
             self.metrics["conversation.no_echo"] = ratio(echo_ok, echo_n)
 
@@ -562,13 +574,15 @@ class Runner:
                     "products_proposed": turn.get("proposed", []),
                 }
             )
-            trace.append({"turn": i, "node": "finish", "added": turn.get("added", [])})
+            # the case's client replies state what they unlock, so earned and told are the same here
+            trace.append({"turn": i, "node": "finish", "added": turn.get("added", []), "told": turn.get("added", [])})
             unlocked += turn.get("added", [])
         return {
             "client_id": case["client"],
             "transcript": transcript,
             "trace": trace,
             "unlocked": unlocked,
+            "told": unlocked,
             "events": [],
         }
 

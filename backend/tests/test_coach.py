@@ -25,11 +25,12 @@ STATE = {
         {"role": "client", "content": "I only use Islamic banking, so no interest."},
     ],
     "unlocked": ["seasonal_cash_flow", "sharia_compliance"],
+    "told": ["seasonal_cash_flow", "sharia_compliance"],
     "trace": [
         {"turn": 1, "node": "classify", "question_type": "open", "products_proposed": []},
-        {"turn": 1, "node": "finish", "added": ["seasonal_cash_flow"]},
+        {"turn": 1, "node": "finish", "added": ["seasonal_cash_flow"], "told": ["seasonal_cash_flow"]},
         {"turn": 2, "node": "classify", "question_type": "closed", "products_proposed": ["business_overdraft"]},
-        {"turn": 2, "node": "finish", "added": ["sharia_compliance"]},
+        {"turn": 2, "node": "finish", "added": ["sharia_compliance"], "told": ["sharia_compliance"]},
     ],
     "events": [],
 }
@@ -118,6 +119,16 @@ def test_facts_come_from_the_interview_and_the_rules():
         "Not Sharia-compliant, and the client accepts only Sharia-compliant products."
     ]  # an unsuitable product gets only the reasons that rule it out
     assert reasons["murabaha_business_finance"][-1].startswith("Existing debts")  # the check comes after the fit
+
+
+def test_a_need_earned_but_never_said_is_not_credited():
+    content = load_content()
+    # Turn 1 earned seasonality, but the client's reply did not state it (the guard saw no reveal).
+    trace = [{**t, "told": []} if t["node"] == "finish" and t["turn"] == 1 else t for t in STATE["trace"]]
+    state = {**STATE, "told": ["sharia_compliance"], "trace": trace}
+    sheet = fact_sheet(content, content.clients["khalid_al_mansouri"], state, SUBMISSION)
+    needs = {n.id: (n.discovered, n.turn) for n in sheet.needs}
+    assert needs["seasonal_cash_flow"] == (False, None) and needs["sharia_compliance"] == (True, 2)
 
 
 def test_unchecked_claims_are_redrafted(model):

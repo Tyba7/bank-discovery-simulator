@@ -108,21 +108,21 @@ def fact_sheet(content: Content, client: Client, state: dict, submission: Submis
         "" if t.get("flag") else t["content"] for t in state.get("transcript", []) if t["role"] == "student"
     ]
     trace = state.get("trace", [])
-    unlocked_at: dict[str, int] = {}
+    told_at: dict[str, int] = {}
     proposed: dict[str, list[int]] = {}
     question_types: Counter = Counter()
     for t in trace:
-        if t["node"] == "finish":  # saved unlocks only: a turn that fell back told the student nothing
-            for need_id in t.get("added", []):
-                unlocked_at.setdefault(need_id, t["turn"])
+        if t["node"] == "finish":  # credit goes to the turn whose shown reply actually stated the need
+            for need_id in t.get("told", []):
+                told_at.setdefault(need_id, t["turn"])
         if t["node"] == "classify" and "question_type" in t:
             question_types[t["question_type"]] += 1
             for pid in t.get("products_proposed", []):
                 proposed.setdefault(pid, []).append(t["turn"])
-    discovered = set(state.get("unlocked", []))
+    discovered = set(state.get("told", []))  # earned but never said is not found: the student did not learn it
     needs = []
     for n in client.hidden_needs:
-        turn = unlocked_at.get(n.id)
+        turn = told_at.get(n.id)
         question = student_turns[turn - 1] if turn and turn <= len(student_turns) else None
         needs.append(NeedResult(n.id, n.category, n.topic, n.fact, n.id in discovered, turn, question))
 

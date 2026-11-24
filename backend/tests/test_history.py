@@ -30,6 +30,7 @@ class RecordingModel:
     def __init__(self):
         self.calls: list[tuple[str, list[dict]]] = []
         self.reject_next_drafts = 0  # guard rejects this many drafts, forcing the fallback
+        self.reveals: list[str] = []  # needs the guard reports each passing draft as stating
 
     def __call__(self, **kwargs):
         schema = kwargs.get("response_format", {}).get("json_schema", {}).get("name")
@@ -48,12 +49,12 @@ class RecordingModel:
                 }
             )
         if schema == "GuardVerdict":
-            leaked = []
+            revealed = list(self.reveals)
             if self.reject_next_drafts:
                 self.reject_next_drafts -= 1
-                leaked = ["sharia_compliance"]  # still locked, so the code rejects the draft
+                revealed = ["sharia_compliance"]  # still locked, so the code rejects the draft
             return reply(
-                {"reason": "ok", "revealed_need_ids": leaked, "broke_character": False, "invented_fact": False}
+                {"reason": "ok", "revealed_need_ids": revealed, "broke_character": False, "invented_fact": False}
             )
         return reply("Thank you, that is a fair question.")  # no digits: the number check would flag them
 
@@ -146,10 +147,22 @@ def test_an_unlock_is_saved_only_when_the_reply_is_shown(api, model):
     before = len(model.calls)
     say(api, sid, "How many staff do you have?")
     assert lease_fact not in model.prompts("client", since=before)  # not shared on an unrelated later turn
+    model.reveals = ["existing_lease"]  # this time the shown reply states the lease
     say(api, sid, "So, do you have any leases?")  # asked again, answered this time
-    assert state()["unlocked"] == ["existing_lease"]
+    assert state()["unlocked"] == state()["told"] == ["existing_lease"]
     finish = [t for t in state()["trace"] if t["node"] == "finish"][-1]
-    assert finish["added"] == ["existing_lease"] and finish["turn"] == 3  # the coach credits turn 3, not turn 1
+    assert finish["added"] == finish["told"] == ["existing_lease"] and finish["turn"] == 3  # credited at turn 3
+
+
+def test_an_earned_need_counts_as_found_only_once_a_shown_reply_states_it(api, model):
+    sid = start(api)
+    state = lambda: api.app.state.graph.get_state(api.app.state.sessions.get(sid).config()).values
+    say(api, sid, "Do you have any leases?")  # earned, but this reply does not state the lease
+    assert state()["unlocked"] == ["existing_lease"] and state()["told"] == []  # allowed, not yet found
+    model.reveals = ["existing_lease"]
+    say(api, sid, "How much is left on the lease?")
+    finish = [t for t in state()["trace"] if t["node"] == "finish"][-1]
+    assert state()["told"] == ["existing_lease"] and finish["told"] == ["existing_lease"] and finish["turn"] == 2
 
 
 def test_a_turn_the_classifier_never_sees_has_its_own_labels(api, model):

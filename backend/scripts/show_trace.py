@@ -24,7 +24,7 @@ NODE_FIELDS = {
     "update_unlocked": ("pending",),
     "client_reply": ("attempt",),
     "guard": ("leaked", "number_leak", "new_number", "broke_character", "invented_fact", "reason"),
-    "finish": ("added", "discarded"),  # saved unlocks; discarded = earned but the turn fell back
+    "finish": ("added", "told", "discarded"),  # added = earned; told = the shown reply stated it; discarded = fell back
 }
 MESSAGE = re.compile(r"<message>\n(.*)\n</message>\s*$", re.DOTALL)
 
