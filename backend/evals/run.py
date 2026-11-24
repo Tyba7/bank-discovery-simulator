@@ -132,11 +132,13 @@ class Runner:
 
     def safe(self, suite, fn, item):
         """One failed call is recorded and skipped; it never ends the whole run."""
+        name = (item.get("id") or item.get("question", "?")[:60]) if isinstance(item, dict) else str(item)
         try:
-            return fn(item)
+            # every model call in the call log says which case and which A/B arm it belongs to
+            with llm_scope(case=name, arm=self.variant or "default"):
+                return fn(item)
         except Exception as e:  # noqa: BLE001 -- any failure is recorded per case; the run goes on
             self.errors[suite] += 1
-            name = (item.get("id") or item.get("question", "?")[:60]) if isinstance(item, dict) else str(item)
             self.fail(suite, name, f"error: {type(e).__name__}: {str(e)[:120]}")
             return None
 
@@ -845,7 +847,18 @@ def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline:
         "regressions": regressions(dev, baseline),
         "flaky": sorted(set(runner.flaky)),
         "failures": runner.failures,
+        "call_log": os.environ.get("LLM_CALL_LOG"),  # every prompt and raw output of this run, for show_trace
     }
+
+
+def use_call_log(ab: bool) -> Path:
+    """Each eval run writes its own call log with full prompts and raw outputs, so any failed case can be read back
+    exactly (scripts/show_trace.py). It stays in the git-ignored logs/ folder; the app's own LLM_CALL_LOG is not used."""
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S")
+    path = EVALS.parent / "logs" / f"eval-{stamp}{'-ab' if ab else ''}.jsonl"
+    os.environ["LLM_CALL_LOG"] = str(path)
+    os.environ["LLM_CALL_LOG_CONTENT"] = "1"
+    return path
 
 
 def save(result: dict) -> Path:
@@ -941,6 +954,8 @@ def main() -> int:
     if unknown := set(suites) - set(SUITES + SEALED):
         parser.error(f"unknown suite {sorted(unknown)}")
     logging.basicConfig(level=logging.WARNING)
+    call_log = use_call_log(bool(args.ab))
+    print(f"call log: {call_log.relative_to(EVALS.parent)}  (read it with: python -m scripts.show_trace <path>)")
     if args.ab:
         if args.write_baseline:
             parser.error("--write-baseline cannot be combined with --ab")

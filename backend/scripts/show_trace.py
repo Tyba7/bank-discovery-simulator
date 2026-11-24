@@ -3,8 +3,11 @@
     uv run python -m scripts.show_trace logs/calls.jsonl                 # every session, every turn
     uv run python -m scripts.show_trace logs/calls.jsonl --session ID    # one session (a prefix is enough)
     uv run python -m scripts.show_trace logs/calls.jsonl --turn 3 --full # one turn, with every prompt and raw output
+    uv run python -m scripts.show_trace logs/eval-….jsonl --session default:p-k-04 --full  # one eval case (arm:case)
 
 The student's words and the client's replies appear only when the log was written with LLM_CALL_LOG_CONTENT=1.
+Eval runs write their own log (evals/run.py prints its path); calls made outside an interview, such as a single
+classifier case, are grouped by A/B arm and case id instead of by session.
 """
 
 import argparse
@@ -73,13 +76,15 @@ def render(rows: list[dict], session: str | None = None, turn: int | None = None
     turns: dict[tuple, list[tuple[dict, list[dict]]]] = defaultdict(list)
     pending: dict[tuple, list[dict]] = defaultdict(list)
     for r in rows:
-        key = (r.get("session"), r.get("turn"))
+        group = r.get("session") or (f"{r['arm']}:{r['case']}" if r.get("case") else None)
+        key = (group, r.get("turn"))
         if r.get("kind") == "call":
             pending[key].append(r)
         elif r.get("kind") == "node":
             turns[key].append((r, pending.pop(key, [])))
     for key, calls in pending.items():  # calls outside the graph (coach, evals) or a node that crashed
-        turns[key].append(({"node": calls[0].get("node") or "(no node)", "ms": None}, calls))
+        label = calls[0].get("node") or (f"{calls[0]['suite']} case" if calls[0].get("suite") else "(no node)")
+        turns[key].append(({"node": label, "ms": None}, calls))
 
     out = []
     for (sid, t), nodes in turns.items():

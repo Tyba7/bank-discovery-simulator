@@ -47,6 +47,20 @@ def test_filters_and_full_mode():
     assert render(ROWS, turn=7) == "no matching rows"
 
 
+def test_eval_calls_outside_an_interview_are_grouped_by_arm_and_case():
+    question = {"role": "user", "content": "<conversation>\n</conversation>\n<message>\nAny loans?\n</message>"}
+    rows = [
+        {
+            **call(None, None, "classifier", session=None, messages=[question], output="{}"),
+            "arm": "decide",
+            "case": "p-k-04",
+        },
+        {**call(None, None, "classifier", session=None), "arm": "default", "case": "p-k-04"},
+    ]
+    text = render(rows, session="decide:p-k-04")
+    assert text.startswith('session decide:p-k-04  turn None  "Any loans?"') and "default:" not in text
+
+
 def test_student_text_is_marked_missing_without_content_logging():
     rows = [node("check_input", 1), call("classify", 1, "classifier"), node("classify", 1)]
     assert render(rows).startswith("session s1  turn 1  (student text not logged)")
