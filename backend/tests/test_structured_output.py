@@ -2,11 +2,12 @@ import json
 import threading
 
 import litellm
+import pytest
 
 from app.config import Settings
 from app.content import load_content
 from app.interview import classification_model, classify_message, decide_unlocks, guard_model, needs_unlocked_by
-from app.llm import LLM, _strict
+from app.llm import LLM, LLMOutputError, _strict
 from app.prompts import Prompt
 
 SETTINGS = Settings("http://fake", "fake-key", "fake-model", 1.0, {})
@@ -92,3 +93,35 @@ def test_parallel_failures_drop_an_unsupported_mode_only_once(monkeypatch):
     for t in threads:
         t.join()
     assert errors == [] and llm.json_modes == ["json_object", "prompt"]
+
+
+def reply(text, finish):
+    return litellm.ModelResponse(choices=[{"message": {"role": "assistant", "content": text}, "finish_reason": finish}])
+
+
+def test_cut_off_json_is_asked_again_with_more_room_not_repaired(monkeypatch):
+    good = json.dumps({"reason": "ok", "revealed_need_ids": [], "broke_character": False, "invented_fact": False})
+    calls = []
+
+    def complete(**kwargs):
+        calls.append(kwargs)
+        return reply('{"reason": "Wait, let me look', "length") if len(calls) == 1 else reply(good, "stop")
+
+    monkeypatch.setattr(litellm, "completion", complete)
+    verdict = LLM(SETTINGS).chat_json([{"role": "user", "content": "check"}], guard_model(["x"]), max_tokens=100)
+    assert verdict.reason == "ok"
+    assert [c["max_tokens"] for c in calls] == [100, 200]
+    assert all("invalid" not in str(c["messages"]) for c in calls)  # the half reply was never shown back as a repair
+
+
+def test_json_cut_off_twice_fails_after_two_calls(monkeypatch):
+    calls = []
+
+    def complete(**kwargs):
+        calls.append(kwargs)
+        return reply('{"reason": "still going', "length")
+
+    monkeypatch.setattr(litellm, "completion", complete)
+    with pytest.raises(LLMOutputError):
+        LLM(SETTINGS).chat_json([{"role": "user", "content": "check"}], guard_model(["x"]), max_tokens=100)
+    assert len(calls) == 2

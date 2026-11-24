@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 # Strongest first. Not every OpenAI-compatible server supports json_schema.
 JSON_MODES = ("json_schema", "json_object", "prompt")
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
+TRUNCATION_RETRY_FACTOR = 2  # a JSON reply cut off at max_tokens is asked for again with this many times the room
 
 
 class LLMOutputError(RuntimeError):
@@ -102,7 +103,8 @@ class LLM:
         mode: str | None = None,
         attempt: int = 1,
         **extra,
-    ) -> str:
+    ) -> tuple[str, bool]:
+        """The reply text and whether the server cut it off at max_tokens."""
         call = {"model": self.s.llm_model, "json_mode": mode, "attempt": attempt, "max_tokens": max_tokens}
         sent = {"messages": messages, **({"response_format": extra["response_format"]} if extra else {})}
         start = time.perf_counter()
@@ -128,10 +130,10 @@ class LLM:
         )
         if truncated:
             log.warning("LLM-002 reply truncated at max_tokens=%s", max_tokens)
-        return choice.message.content or ""
+        return choice.message.content or "", truncated
 
     def chat(self, messages: list[dict], temperature: float = 0.7, max_tokens: int = 300) -> str:
-        return self._complete(messages, temperature, max_tokens)
+        return self._complete(messages, temperature, max_tokens)[0]
 
     def chat_json(
         self, messages: list[dict], schema: type[BaseModel], temperature: float = 0.0, max_tokens: int = 300
@@ -162,17 +164,25 @@ class LLM:
             messages = _with_schema_instruction(messages, schema_json)
             extra = {"response_format": {"type": "json_object"}} if mode == "json_object" else {}
 
-        text = self._complete(messages, temperature, max_tokens, mode, **extra)
+        text, cut = self._complete(messages, temperature, max_tokens, mode, **extra)
+        if cut:
+            # A cut-off reply cannot be repaired: showing the model its own half reply under the same limit cuts it
+            # off again. Ask again with room to finish; this is the one second attempt.
+            text, _ = self._complete(messages, temperature, max_tokens * TRUNCATION_RETRY_FACTOR, mode, 2, **extra)
         try:
             return schema.model_validate_json(_extract_json(text))
         except ValidationError as e:
+            if cut:
+                raise LLMOutputError(
+                    f"{schema.__name__}: reply cut off at max_tokens={max_tokens}, retry invalid"
+                ) from e
             log.warning("LLM-003 invalid structured output (%s mode), repairing once", mode)
             repair = [
                 *messages,
                 {"role": "assistant", "content": text},
                 {"role": "user", "content": f"That JSON is invalid: {e}. Reply with only the corrected JSON object."},
             ]
-            text = self._complete(repair, temperature, max_tokens, mode, attempt=2, **extra)
+            text, _ = self._complete(repair, temperature, max_tokens, mode, attempt=2, **extra)
             try:
                 return schema.model_validate_json(_extract_json(text))
             except ValidationError as e2:
