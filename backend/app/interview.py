@@ -234,6 +234,8 @@ def product_note(products) -> str:
 
 
 def turn_number(state) -> int:
+    if not state.get("transcript"):  # the opening runs before any student turn
+        return 0
     return sum(t["role"] == "student" for t in state.get("transcript", [])) + 1
 
 
