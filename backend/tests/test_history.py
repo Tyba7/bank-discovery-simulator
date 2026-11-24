@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 
 from app.checks import MAX_MESSAGE_CHARS, fence
 from app.config import Settings
-from app.interview import FALLBACK, FALLBACK_SHOWN, REMOVED, model_history
+from app.content import load_content
+from app.interview import FALLBACK, FALLBACK_SHOWN, REMOVED, model_history, needs_unlocked_by
 from app.llm import LLM
 from app.main import create_app
 
@@ -31,10 +32,13 @@ class RecordingModel:
         self.calls: list[tuple[str, list[dict]]] = []
         self.reject_next_drafts = 0  # guard rejects this many drafts, forcing the fallback
         self.reveals: list[str] = []  # needs the guard reports each passing draft as stating
+        self.broken_classifier = False  # the classifier answers with invalid JSON, even after the repair
 
     def __call__(self, **kwargs):
         schema = kwargs.get("response_format", {}).get("json_schema", {}).get("name")
         self.calls.append((schema or "client", kwargs["messages"]))
+        if schema == "Classification" and self.broken_classifier:
+            return reply("not json")
         if schema == "Classification":
             injected = "pretend" in kwargs["messages"][-1]["content"]
             asks_lease = "lease" in kwargs["messages"][-1]["content"].split("<message>")[-1]
@@ -152,6 +156,26 @@ def test_an_unlock_is_saved_only_when_the_reply_is_shown(api, model):
     assert state()["unlocked"] == state()["told"] == ["existing_lease"]
     finish = [t for t in state()["trace"] if t["node"] == "finish"][-1]
     assert finish["added"] == finish["told"] == ["existing_lease"] and finish["turn"] == 3  # credited at turn 3
+
+
+def test_a_classifier_failure_asks_to_rephrase_and_unlocks_nothing(api, model):
+    sid = start(api)
+    state = lambda: api.app.state.graph.get_state(api.app.state.sessions.get(sid).config()).values
+    model.broken_classifier = True
+    before = len(model.calls)
+    assert say(api, sid, "Do you have any leases?") == FALLBACK["guard"]  # not a silent "no" from the client
+    assert model.prompts("client", since=before) == ""  # the client was never asked to answer it
+    s = state()
+    assert s["unlocked"] == [] and [e["code"] for e in s["events"]] == ["CLS-001"]
+    assert [t["reason"] for t in s["trace"] if t["node"] == "fallback"] == ["classifier"]
+
+
+def test_an_off_topic_turn_unlocks_nothing():
+    content = load_content()
+    khalid = content.clients["khalid_al_mansouri"]
+    labels = {"unlocks": ["existing_lease"], "products_proposed": [], "on_topic": False, "injection_attempt": False}
+    assert needs_unlocked_by(content, khalid, labels) == set()
+    assert needs_unlocked_by(content, khalid, {**labels, "on_topic": True}) == {"existing_lease"}
 
 
 def test_an_earned_need_counts_as_found_only_once_a_shown_reply_states_it(api, model):

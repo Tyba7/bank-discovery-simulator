@@ -87,6 +87,13 @@ def rows(path: Path, **defaults) -> list[dict]:
     return [{**defaults, **json.loads(line)} for line in path.read_text().splitlines() if line.strip()]
 
 
+PROVIDER_FAILURES = {"CLS-001", "GRD-001"}  # the classifier or guard call failed: the app fell back, nothing decided
+
+
+class ProviderFailure(RuntimeError):
+    """A conversation run in which a model call failed; recorded as an error, not as a wrong decision."""
+
+
 def ratio(a: int, b: int) -> float:
     return round(a / b, 3) if b else 1.0
 
@@ -354,6 +361,10 @@ class Runner:
                 }
             )
         self.collect(state)
+        # A model call that failed says nothing about the unlock decision: count the run as an error (safe() records
+        # it and leaves it out of the metrics and the A/B pairing) instead of scoring a fail-closed turn as wrong.
+        if failed := sorted({e["code"] for e in state.get("events", [])} & PROVIDER_FAILURES):
+            raise ProviderFailure(f"{', '.join(failed)} during the conversation")
         return turns
 
     def suite_conversation(self):

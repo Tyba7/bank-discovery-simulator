@@ -209,7 +209,7 @@ def classify_message(
 
 
 def needs_unlocked_by(content: Content, client: Client, classification: dict) -> set[str]:
-    if classification["injection_attempt"]:  # an injection turn unlocks nothing
+    if classification["injection_attempt"] or not classification["on_topic"]:  # these turns unlock nothing
         return set()
     proposed = (conflicts(content, client, content.products[p]) for p in classification["products_proposed"])
     return set(classification["unlocks"]).union(*proposed)
@@ -342,10 +342,10 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 show_facts=bool(options.get("classifier_facts")),
                 decide=bool(options.get("classifier_decide")),
             )
-        except Exception as e:  # fail closed: a broken classifier never unlocks anything
+        except Exception as e:  # fail closed: nothing unlocks, and the student is asked to rephrase (no silent "no")
             log.exception("classifier failed")
             return {
-                "classification": FAIL_CLOSED,
+                "classification": {**FAIL_CLOSED, "failed": True},
                 "events": [event(state, "CLS-001", type(e).__name__)],
                 "_detail": {"error": type(e).__name__},
             }
@@ -453,8 +453,15 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         return "client_reply" if state["attempts"] < MAX_REPLY_ATTEMPTS else "fallback"
 
     def fallback(state):
-        reason = state["input_flag"] if state["input_flag"] in FALLBACK else "guard"
-        return {"draft": FALLBACK[reason], "reply_flag": "fallback", "_detail": {"reason": reason}}
+        if state["input_flag"] in FALLBACK:
+            reason = state["input_flag"]
+        else:  # the classifier or the guard could not decide: same polite request to rephrase
+            reason = "classifier" if state["classification"].get("failed") else "guard"
+        return {
+            "draft": FALLBACK.get(reason, FALLBACK["guard"]),
+            "reply_flag": "fallback",
+            "_detail": {"reason": reason},
+        }
 
     def finish(state):
         injected = state.get("classification", {}).get("injection_attempt") and not state.get("input_flag")
@@ -502,7 +509,11 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         ),
         ["fallback", "update_unlocked", "classify"],
     )
-    graph.add_edge("classify", "update_unlocked")
+    graph.add_conditional_edges(
+        "classify",
+        lambda s: "fallback" if s["classification"].get("failed") else "update_unlocked",
+        ["fallback", "update_unlocked"],
+    )
     graph.add_edge("update_unlocked", "client_reply")
     graph.add_edge("client_reply", "guard")
     graph.add_conditional_edges("guard", after_guard, ["finish", "client_reply", "fallback"])
