@@ -548,7 +548,7 @@ class Runner:
                     "products_proposed": turn.get("proposed", []),
                 }
             )
-            trace.append({"turn": i, "node": "update_unlocked", "added": turn.get("added", [])})
+            trace.append({"turn": i, "node": "finish", "added": turn.get("added", [])})
             unlocked += turn.get("added", [])
         return {
             "client_id": case["client"],

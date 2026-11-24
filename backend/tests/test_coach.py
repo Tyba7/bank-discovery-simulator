@@ -27,9 +27,9 @@ STATE = {
     "unlocked": ["seasonal_cash_flow", "sharia_compliance"],
     "trace": [
         {"turn": 1, "node": "classify", "question_type": "open", "products_proposed": []},
-        {"turn": 1, "node": "update_unlocked", "added": ["seasonal_cash_flow"]},
+        {"turn": 1, "node": "finish", "added": ["seasonal_cash_flow"]},
         {"turn": 2, "node": "classify", "question_type": "closed", "products_proposed": ["business_overdraft"]},
-        {"turn": 2, "node": "update_unlocked", "added": ["sharia_compliance"]},
+        {"turn": 2, "node": "finish", "added": ["sharia_compliance"]},
     ],
     "events": [],
 }

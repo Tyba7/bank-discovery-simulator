@@ -18,12 +18,12 @@ ROWS = [
     call("classify", 1, "classifier", messages=[QUESTION], output="not json"),
     call("classify", 1, "classifier", attempt=2, code="LLM-003", messages=[QUESTION], output="{}"),
     node("classify", 1, unlocks=["existing_lease"], reason="asks about debt"),
-    node("update_unlocked", 1, added=["existing_lease"]),
+    node("update_unlocked", 1, pending=["existing_lease"]),
     call("client_reply", 1, "client", output="We owe a little."),
     node("client_reply", 1, attempt=1),
     call("guard", 1, "guard"),
     node("guard", 1, leaked=["sharia_compliance"], events=[{"code": "CLI-001", "detail": "sharia_compliance"}]),
-    node("finish", 1),
+    node("finish", 1, added=[], discarded=["existing_lease"]),
     node("opening", 0, session="s2"),
 ]
 

@@ -66,7 +66,8 @@ class Turn(TypedDict):
 class InterviewState(TypedDict, total=False):
     client_id: str
     transcript: Annotated[list[Turn], operator.add]
-    unlocked: list[str]
+    unlocked: list[str]  # needs the student has been told about; saved only when a turn's reply is shown
+    pending: list[str]  # needs this turn's question earned: the draft may share them, saved in finish on success
     events: Annotated[list[dict], operator.add]  # failure-registry codes with turn numbers
     trace: Annotated[list[dict], operator.add]  # one entry per node run: timing, outputs, prompt version
     student_message: str  # raw input for this turn
@@ -284,6 +285,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "message": message,
             "input_flag": flag,
             "reply_flag": None,
+            "pending": [],
             "problems": [],
             "attempts": 0,
             "_detail": {"flag": flag},
@@ -323,8 +325,12 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
 
     def update_unlocked(state):
         new = needs_unlocked_by(content, content.clients[state["client_id"]], state["classification"])
-        added = sorted(new - set(state["unlocked"]))
-        return {"unlocked": sorted(set(state["unlocked"]) | new), "_detail": {"added": added}}
+        pending = sorted(new - set(state["unlocked"]))
+        return {"pending": pending, "_detail": {"pending": pending}}
+
+    def allowed(state) -> set[str]:
+        """What this turn's reply may share: needs already told, plus the ones this question earned."""
+        return set(state["unlocked"]) | set(state.get("pending", []))
 
     def client_reply(state):
         client, c = content.clients[state["client_id"]], state["classification"]
@@ -336,7 +342,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 f"\nYour previous draft was rejected because {'; '.join(state['problems'])}. "
                 "Write a new reply that fixes this."
             )
-        system = client_system_prompt(client_prompt, client, set(state["unlocked"]), note)
+        system = client_system_prompt(client_prompt, client, allowed(state), note)
         history = model_history(state["transcript"])
         messages = [{"role": "system", "content": system}]
         if history and history[0]["role"] == "client":  # the opening is still in the window; it answered the greeting
@@ -370,7 +376,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 llms["guard"],
                 guard_prompt,
                 client,
-                set(state["unlocked"]),
+                allowed(state),
                 student_words,
                 question,
                 state["draft"],
@@ -422,7 +428,11 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "content": state["draft"],
             **({"flag": "fallback"} if state.get("reply_flag") else {}),
         }
-        return {"transcript": [student, client]}
+        pending = state.get("pending", [])
+        if state.get("reply_flag"):  # the student was asked to rephrase, so nothing was told: the unlock is not kept
+            return {"transcript": [student, client], "pending": [], "_detail": {"added": [], "discarded": pending}}
+        unlocked = sorted(set(state["unlocked"]) | set(pending))
+        return {"transcript": [student, client], "unlocked": unlocked, "pending": [], "_detail": {"added": pending}}
 
     graph = StateGraph(InterviewState)
     nodes = {

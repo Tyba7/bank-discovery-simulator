@@ -36,10 +36,11 @@ class RecordingModel:
         self.calls.append((schema or "client", kwargs["messages"]))
         if schema == "Classification":
             injected = "pretend" in kwargs["messages"][-1]["content"]
+            asks_lease = "lease" in kwargs["messages"][-1]["content"].split("<message>")[-1]
             return reply(
                 {
                     "reason": "test",
-                    "unlocks": [],
+                    "unlocks": ["existing_lease"] if asks_lease and not injected else [],
                     "products_proposed": [],
                     "on_topic": True,
                     "injection_attempt": injected,
@@ -50,7 +51,7 @@ class RecordingModel:
             leaked = []
             if self.reject_next_drafts:
                 self.reject_next_drafts -= 1
-                leaked = ["existing_lease"]
+                leaked = ["sharia_compliance"]  # still locked, so the code rejects the draft
             return reply(
                 {"reason": "ok", "revealed_need_ids": leaked, "broke_character": False, "invented_fact": False}
             )
@@ -132,6 +133,23 @@ def test_a_fallback_is_flagged_and_never_shown_to_models_as_client_speech(api, m
     assert FALLBACK["guard"] not in later and FALLBACK_SHOWN in later
     exported = api.get(f"/api/sessions/{sid}/export").json()["conversation"]
     assert [m.get("flag") for m in exported if m["role"] == "client"] == [None, "fallback", None]
+
+
+def test_an_unlock_is_saved_only_when_the_reply_is_shown(api, model):
+    sid = start(api)
+    state = lambda: api.app.state.graph.get_state(api.app.state.sessions.get(sid).config()).values
+    model.reject_next_drafts = 2  # the question earns the lease, but both drafts fail the guard
+    assert say(api, sid, "Do you have any leases?") == FALLBACK["guard"]
+    finish = [t for t in state()["trace"] if t["node"] == "finish"][-1]
+    assert state()["unlocked"] == [] and finish["discarded"] == ["existing_lease"]  # told nothing, so not found
+    lease_fact = "QAR 180,000"
+    before = len(model.calls)
+    say(api, sid, "How many staff do you have?")
+    assert lease_fact not in model.prompts("client", since=before)  # not shared on an unrelated later turn
+    say(api, sid, "So, do you have any leases?")  # asked again, answered this time
+    assert state()["unlocked"] == ["existing_lease"]
+    finish = [t for t in state()["trace"] if t["node"] == "finish"][-1]
+    assert finish["added"] == ["existing_lease"] and finish["turn"] == 3  # the coach credits turn 3, not turn 1
 
 
 def test_model_history_keeps_whole_exchanges():

@@ -112,7 +112,7 @@ def fact_sheet(content: Content, client: Client, state: dict, submission: Submis
     proposed: dict[str, list[int]] = {}
     question_types: Counter = Counter()
     for t in trace:
-        if t["node"] == "update_unlocked":
+        if t["node"] == "finish":  # saved unlocks only: a turn that fell back told the student nothing
             for need_id in t.get("added", []):
                 unlocked_at.setdefault(need_id, t["turn"])
         if t["node"] == "classify" and "question_type" in t:
