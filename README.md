@@ -215,6 +215,14 @@ Everything a teacher changes is in [`content/`](content/). No code changes are n
 `taxonomy.json`. Then restart the server. Content is validated at startup: an unknown tag, a duplicate id, or fewer
 than 2 clients or 3 products stops the server with a message that names the file and the problem.
 
+**Writing a hidden need's `topic`.** The topic decides which questions reveal the need, so:
+- name the subject a question must be about, as a phrase that reads well after "Next time, ask about…" (the coach
+  uses it that way);
+- keep it to the present (a debt still being repaid, not how something was paid for), and do not reuse a word that
+  belongs to another need's subject;
+- write a preference as a banking preference ("banking preferences, especially religious or ethical ones about…"),
+  so that a general question about the client's preferences reveals it.
+
 Check content without starting the server:
 
 ```bash

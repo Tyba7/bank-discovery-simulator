@@ -251,3 +251,50 @@ Nous, k=3):
 - **Then:** `--suite classifier,holdout,injection,conversation --k 3` on the local model. The results are reported
   under the new rule and are not comparable with earlier numbers. This is a change of specification, not a prompt
   A/B, so there is no adoption rule.
+
+**KI-05 relabelling result** (25 Nov 2026):
+- **Rater pass** (one run per item): 318 items (207 development classifier cases, 15 Layla cases, 96 conversation
+  turns). It disagreed with 9 development labels. Every Layla label and every conversation label stayed the same.
+- **Stability check, added after the plan** because one run per case was too thin: the 9 cases and 7 controls,
+  rated 3 times each under two wordings: the full rule, and a plain one ("a question about that fact's subject")
+  without our extra rules. 8 cases gave the same answer in every run under both wordings, so they do not depend on
+  how we worded the rule, and were relabelled. p-k-04 did not: "none" in 3 of 3 runs under the full rule,
+  `seasonal_cash_flow` in 3 of 3 under the plain one. It keeps its old label.
+- **Labels changed** (all were "nothing"):
+
+  | Case | Question | New label |
+  |---|---|---|
+  | p-m-02 | Use these savings to buy a house or a new car? | `education_goal` |
+  | p-m-04 | Save up for a big holiday or a wedding? | `education_goal` |
+  | p-m-06 | Build up this account to prepare for your retirement? | `education_goal` |
+  | p-k-21 | Keep a cash buffer instead of paying off any outstanding leases? | `existing_lease` |
+  | p-k-12 | Familiar with how Sharia-compliant financing structures work? | `sharia_compliance` |
+  | k-near-13 | Have you used Murabaha financing before? (keeps its `near_miss` slice name for traceability) | `sharia_compliance` |
+  | p-k-16 | Curious how Islamic finance products avoid charging interest? | `sharia_compliance` |
+  | p-k-14 | Interested in a presentation on our Sharia-compliant financing products? | `sharia_compliance` |
+
+- **Not changed:** p-m-24 ("regular monthly commitments like rent or car payments") keeps `family_remittances`; the
+  rater agrees, so the classifier's miss on it is a real error.
+- **New-client check, added after the plan,** to test whether rules written while looking at Khalid and Maria still
+  work for clients nobody tuned on: Omar, Layla, and a new client written by `google/gemini-3.5-flash` from the
+  assessment's example (Tariq, a fit-out firm owner whose customers pay late), with 36 questions it wrote and a
+  blind second pass checked (35 kept). Local Qwen, 3 runs per case, previous vs current classifier prompt:
+  - clear positives 12 of 12 in both; clear negatives: no wrong unlock in any run, in both;
+  - Layla: 10 of 11 positives and 4 of 4 negatives in both (the one miss is a product-conflict case that the check
+    script did not score with conflicts);
+  - guesses and leading questions: 5 of 6 before, 6 of 6 now; near misses 5 of 5 in both, with one wrong unlock
+    in one run before and none now.
+  - Full interviews with the current prompts: Omar 6 of 6 turns right; Tariq 5 of 6. Nothing came out at the
+    opening or on greetings, public facts or "anything else?". Tariq's miss: "Do you have any banking preferences?"
+    did not reveal his Sharia preference, because his topic reads "his religious preferences regarding financing…".
+    The previous prompts behave the same; it depends on how a topic is worded, not on this change.
+- **Limits:** one rater family; the rule was worded after seeing these cases (the plain-wording check shows the 8
+  relabels do not depend on that wording); development scores now partly reflect fitting to the rule. The clean
+  evidence is Layla (unchanged) and the new-client check. The sealed test stays on the earlier rule.
+- **A general-preferences rule was tried and removed** (before the rerun). To close Tariq's gap, a classifier rule
+  said that a general question about banking preferences asks about every preference need. It closed the gap for
+  Khalid, Omar and Tariq (3 of 3 runs on three wordings), but it unlocked all three of Maria's needs at once, and the
+  word "prefer" pulled the Sharia need into p-k-21. A narrower version (religious or ethical preferences only, "no
+  other need") made the model argue with itself in its `reason` field until the reply was cut off twice. Both were
+  removed; the classifier prompt is the version checked above. The gap stays and depends on how a topic is worded,
+  so the README now tells content authors to write a preference as a banking preference.
