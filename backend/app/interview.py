@@ -92,11 +92,21 @@ def list_of(ids: list[str]):
     return list[one_of(ids)]  # pyright: ignore[reportInvalidTypeForm]
 
 
-def classification_model(client: Client, product_ids: list[str]) -> type[BaseModel]:
+DIRECTNESS = Literal["direct", "nearby", "none"]
+
+
+def classification_model(client: Client, product_ids: list[str], decide: bool = False) -> type[BaseModel]:
+    """decide (KI-05 experiment): instead of choosing the unlocks itself, the model rates how directly the message
+    asks about each need, one fixed field per need, and code unlocks only the "direct" ones (decide_unlocks)."""
+    if decide:
+        asks_about = create_model("AsksAbout", **{n.id: (DIRECTNESS, ...) for n in client.hidden_needs})
+        perception = {"asks_about": (asks_about, ...)}
+    else:
+        perception = {"unlocks": (list_of([n.id for n in client.hidden_needs]), ...)}
     return create_model(
         "Classification",
         reason=(str, ...),
-        unlocks=(list_of([n.id for n in client.hidden_needs]), ...),
+        **perception,
         products_proposed=(list_of(product_ids), ...),
         on_topic=(bool, ...),
         injection_attempt=(bool, ...),
@@ -151,13 +161,27 @@ def model_history(transcript: list[Turn], exchanges: int = HISTORY_EXCHANGES) ->
     return [{"role": t["role"], "content": model_text(t)} for t in window]
 
 
+def decide_unlocks(asks_about: dict[str, str]) -> list[str]:
+    """The decision, in code: a need unlocks only when the message asks about it directly."""
+    return sorted(need for need, directness in asks_about.items() if directness == "direct")
+
+
 def classify_message(
-    content: Content, llm: LLM, prompt: Prompt, client: Client, transcript, message: str, show_facts: bool = False
+    content: Content,
+    llm: LLM,
+    prompt: Prompt,
+    client: Client,
+    transcript,
+    message: str,
+    show_facts: bool = False,
+    decide: bool = False,
 ) -> dict:
     """One classifier call. Shared by the graph and the eval runner so evals test the production path.
 
     show_facts (KI-05 experiment): list each need's fact next to its topic. Facts reach the classifier prompt only,
-    never the client prompt or the browser; the classifier outputs ids and a server-side reason."""
+    never the client prompt or the browser; the classifier outputs ids and a server-side reason.
+    decide (KI-05 experiment): the model rates each need; decide_unlocks turns that into the same "unlocks" list, so
+    everything downstream is unchanged."""
     products = "\n".join(f"- {p.id}: {p.name} [{', '.join(p.tags)}]" for p in content.products.values())
     needs = "\n".join(
         f"- {n.id}: {n.topic}" + (f". Fact the client would share: {n.fact}" if show_facts else "")
@@ -170,14 +194,16 @@ def classify_message(
     user = (
         f"<conversation>\n{history or '(start of interview)'}\n</conversation>\n<message>\n{fence(message)}\n</message>"
     )
-    schema = classification_model(client, list(content.products))
+    schema = classification_model(client, list(content.products), decide)
     with llm_scope(role="classifier", prompt=prompt.version):
         result = llm.chat_json(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             schema,
             max_tokens=JSON_MAX_TOKENS,
-        )
-    return result.model_dump()
+        ).model_dump()
+    if decide:
+        result["unlocks"] = decide_unlocks(result["asks_about"])
+    return result
 
 
 def needs_unlocked_by(content: Content, client: Client, classification: dict) -> set[str]:
@@ -290,8 +316,10 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "attempts": 0,
             "_detail": {"flag": flag},
         }
+        # Every turn writes its own classification: a turn the classifier never sees (empty, too long, blocked) must
+        # not leave the previous turn's labels in state for a later step to read.
+        update["classification"] = {**FAIL_CLOSED, "reason": "input check", "injection_attempt": flag == "injection"}
         if flag == "injection":
-            update["classification"] = {**FAIL_CLOSED, "reason": "input check", "injection_attempt": True}
             update["events"] = [event(state, "SEC-001", "input check")]
         elif flag == "too_long":
             update["events"] = [event(state, "SEC-002", f"{len(message)} characters")]
@@ -308,6 +336,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 state["transcript"],
                 state["message"],
                 show_facts=bool(options.get("classifier_facts")),
+                decide=bool(options.get("classifier_decide")),
             )
         except Exception as e:  # fail closed: a broken classifier never unlocks anything
             log.exception("classifier failed")

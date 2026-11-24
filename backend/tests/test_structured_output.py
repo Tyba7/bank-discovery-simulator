@@ -5,8 +5,9 @@ import litellm
 
 from app.config import Settings
 from app.content import load_content
-from app.interview import classification_model, guard_model
+from app.interview import classification_model, classify_message, decide_unlocks, guard_model, needs_unlocked_by
 from app.llm import LLM, _strict
+from app.prompts import Prompt
 
 SETTINGS = Settings("http://fake", "fake-key", "fake-model", 1.0, {})
 
@@ -24,8 +25,45 @@ def objects(node):
 
 def test_every_object_in_the_schema_is_closed():
     content = load_content()
-    schema = _strict(classification_model(content.clients["maria_santos"], list(content.products)).model_json_schema())
-    assert all(o["additionalProperties"] is False for o in objects(schema))
+    for decide in (False, True):
+        model = classification_model(content.clients["maria_santos"], list(content.products), decide)
+        assert all(o["additionalProperties"] is False for o in objects(_strict(model.model_json_schema())))
+
+
+def test_decide_schema_has_one_required_field_per_need_and_code_unlocks_only_direct():
+    content = load_content()
+    client = content.clients["khalid_al_mansouri"]
+    schema = _strict(classification_model(client, list(content.products), decide=True).model_json_schema())
+    asks = schema["$defs"]["AsksAbout"]
+    need_ids = sorted(n.id for n in client.hidden_needs)
+    assert sorted(asks["properties"]) == need_ids and sorted(asks["required"]) == need_ids
+    assert "unlocks" not in schema["properties"]  # the model no longer names the unlocks
+    assert decide_unlocks(
+        {"existing_lease": "nearby", "seasonal_cash_flow": "direct", "sharia_compliance": "none"}
+    ) == ["seasonal_cash_flow"]
+
+
+def test_decide_classifier_returns_the_usual_unlocks_list(monkeypatch):
+    content = load_content()
+    client = content.clients["khalid_al_mansouri"]
+    reply = {
+        "reason": "asks about borrowing; rent is a running cost",
+        "asks_about": {"existing_lease": "direct", "seasonal_cash_flow": "nearby", "sharia_compliance": "none"},
+        "products_proposed": [],
+        "on_topic": True,
+        "injection_attempt": False,
+        "question_type": "closed",
+    }
+    monkeypatch.setattr(
+        litellm,
+        "completion",
+        lambda **kw: litellm.ModelResponse(choices=[{"message": {"role": "assistant", "content": json.dumps(reply)}}]),
+    )
+    result = classify_message(
+        content, LLM(SETTINGS), Prompt("classifier", "decide"), client, [], "Any loans?", decide=True
+    )
+    assert result["unlocks"] == ["existing_lease"] and result["asks_about"]["seasonal_cash_flow"] == "nearby"
+    assert needs_unlocked_by(content, client, {**result, "injection_attempt": True}) == set()  # still blocked
 
 
 def test_parallel_failures_drop_an_unsupported_mode_only_once(monkeypatch):

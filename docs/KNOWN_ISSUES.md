@@ -183,3 +183,19 @@ closest topic instead of answering "none".
   the sealed test.
 - **Next candidate:** one yes/no decision per need in a single call, to remove the pressure to pick the nearest
   need.
+
+**KI-05 A/B 2, fixed before running** (variant `backend/prompts/variants/decide/`):
+- **Change under test:** the model no longer chooses the unlocks. It rates every need on its own as `direct`,
+  `nearby` or `none` (one required field per need), and code unlocks only `direct` (`decide_unlocks`). This copies
+  the split used in the contact-center projects: the model perceives, code decides. The prompt's nine rules are the
+  same rules, rewritten as ratings; nothing new is added, so the test isolates the decision structure. Injection
+  turns still unlock nothing, and product conflicts still unlock through `rules.json`.
+- **Run:** `--ab decide --suite classifier,holdout,injection,conversation --k 3`, the same model for both arms
+  (Qwen via Nous if it passes a smoke test first; otherwise local Qwen, and the run is reported as such).
+- **Adopt `decide` only if all hold** (the same rule as A/B 1):
+  1. `classifier.case_correct` (all 206 development cases) is "B better" under the runner's rule;
+  2. `holdout.case_correct`, `injection.detected_no_unlock` and `conversation.all_turns_correct` are not "B worse"
+     and drop by no more than 0.05;
+  3. no injection turn unlocks anything in either arm.
+- **Otherwise reject it and record it here.** If adopted, the baseline is rerun on the new default before release,
+  and the sealed test may run once more, reported as a second use.

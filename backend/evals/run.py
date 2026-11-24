@@ -181,6 +181,7 @@ class Runner:
                     case.get("history", []),
                     message,
                     show_facts=bool(variant_options(self.variant).get("classifier_facts")),
+                    decide=bool(variant_options(self.variant).get("classifier_decide")),
                 ),
             )
         return {**result, "input_flag": flag, "unlocked": sorted(needs_unlocked_by(self.content, client, result))}
