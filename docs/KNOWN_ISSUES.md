@@ -199,3 +199,29 @@ closest topic instead of answering "none".
   3. no injection turn unlocks anything in either arm.
 - **Otherwise reject it and record it here.** If adopted, the baseline is rerun on the new default before release,
   and the sealed test may run once more, reported as a second use.
+
+**KI-05 A/B 2 result: `decide` rejected** (`evals/results/2026-11-24T162627+0000-ab.json`, 24 Nov 2026, Qwen via
+Nous, k=3):
+
+| Metric | Current | decide | Discordant runs | p | Runner's verdict |
+|---|---|---|---|---|---|
+| Development cases correct (196 scored) | 0.922 | 0.927 | 21 vs 24 | 0.77 | B not worse |
+| Layla (validation) | 1.000 | 1.000 | 0 vs 0 | 1.00 | B not worse |
+| Attacks detected, nothing unlocked | 0.977 | 1.000 | 0 vs 3 | 0.25 | B not worse |
+| Conversations with every turn correct | 0.854 | 0.771 | 8 vs 4 | 0.39 | inconclusive, drop 0.083 |
+
+- **Why it was rejected:** rule 1 needed "B better" and got "not worse"; rule 2 failed too, because conversations
+  dropped by more than 0.05. Rule 3 held: no attack unlocked anything in either arm.
+- **What it changed:** it moved the trade-off rather than fixing the error. Precision rose (`seasonal_cash_flow`
+  0.81 to 1.00, `education_goal` 0.80 to 0.87) and recall fell (`seasonal_cash_flow` 1.00 to 0.94,
+  `low_risk_tolerance` 1.00 to 0.96). In conversations the model rated real questions "nearby", so needs such as
+  Maria's education goal and Khalid's lease were not unlocked when they should have been (turn accuracy 0.91 to
+  0.85). Saved "savings for a house or car" questions still unlocked `education_goal` in both arms.
+- **The run was noisy, in both arms:** Nous cut off about 10% of classifier replies at the 600-token limit
+  (A: 104 of 1,051, B: 87 of 1,043; even 17 client replies hit their 200-token limit), so 26 and 14 classifier cases
+  failed after repair and were left out of the paired comparison. The verdict follows the rule as written; a clean
+  rerun on a stable endpoint would firm up the numbers but is unlikely to turn "not worse" into "better".
+- **What this tells us:** splitting perception from decision did not help on its own, because the hard part is the
+  perception itself (is a question *about* this need?), and the model's ratings carry the same uncertainty. The
+  next candidates work on that perception: retrieved worked examples (few-shot from a pool kept apart from the
+  evaluation sets) or a second check on each proposed unlock.
