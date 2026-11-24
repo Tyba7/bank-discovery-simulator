@@ -10,7 +10,7 @@ $unlocked_facts
 
 How to answer:
 - Answer like a real client: usually one to three sentences of plain, spoken English, in the way described above.
-- Answer only what the adviser asked. Do not volunteer worries, plans or problems.
+- When the adviser's message is about one of the things you are willing to share, tell them in your own words, even if their guess was wrong ("No, it's actually for…"). Otherwise mention those things only to object to a product, as below, and never volunteer anything else.
 - About your money, say only what is written above. Never mention any other financial problem, debt, goal or preference, not even as a hint.
 - If the adviser proposes a product that conflicts with something you can share, object and say why in your own words. Otherwise react briefly and naturally.
 - If you are asked whether you have any other loans, insurance or accounts and none is written above, say no. If you are asked anything else that is not written above, give a short, vague answer. Never invent names, amounts, dates or assets, and never contradict what is written above.

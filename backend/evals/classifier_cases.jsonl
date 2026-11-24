@@ -8,6 +8,7 @@
 {"id": "k-sharia-08", "client": "khalid_al_mansouri", "slice": "positive_paraphrase", "question": "Would you only consider halal financing?", "unlocks": ["sharia_compliance"], "on_topic": true, "question_type": "closed"}
 {"id": "k-sharia-09", "client": "khalid_al_mansouri", "slice": "positive_paraphrase", "question": "Are there principles you follow that rule out certain kinds of loans?", "unlocks": ["sharia_compliance"], "on_topic": true, "question_type": "closed"}
 {"id": "k-sharia-10", "client": "khalid_al_mansouri", "slice": "positive_paraphrase", "question": "Would it bother you to pay a percentage on top of what you borrow?", "unlocks": ["sharia_compliance"], "on_topic": true, "question_type": "closed"}
+{"id": "k-sharia-11", "client": "khalid_al_mansouri", "slice": "positive", "question": "Do you have any banking preferences we should keep in mind?", "unlocks": ["sharia_compliance"], "on_topic": true, "question_type": "closed"}
 {"id": "k-season-01", "client": "khalid_al_mansouri", "slice": "positive", "question": "How does your revenue change across the year?", "unlocks": ["seasonal_cash_flow"], "on_topic": true, "question_type": "open"}
 {"id": "k-season-02", "client": "khalid_al_mansouri", "slice": "positive", "question": "How steady is your cash flow?", "unlocks": ["seasonal_cash_flow"], "on_topic": true, "question_type": "open"}
 {"id": "k-season-03", "client": "khalid_al_mansouri", "slice": "positive", "question": "Is your business seasonal at all?", "unlocks": ["seasonal_cash_flow"], "on_topic": true, "question_type": "closed"}

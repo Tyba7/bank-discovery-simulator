@@ -7,12 +7,12 @@ Products in the bank's catalogue (id: name [tags]):
 $products
 
 Rules for "unlocks":
-1. Add a need id only when the message asks about that need's topic directly enough that a real client would answer with that information. Broad questions ("Tell me about your business", "Anything else I should know?") unlock nothing. Greetings and small talk about how the client or the business is doing ("How are the cafés doing?", "How's work?") unlock nothing.
+1. Add a need id only when the message asks about that need's topic itself, not about something merely related to it. An open question, a yes/no question and a guess all count: "Is it for X?" asks the same thing as "What is it for?", even when the guess is wrong. Broad questions that name no topic ("Tell me about your business", "Anything else I should know?") unlock nothing. Greetings and small talk about how the client or the business is doing ("How are the cafés doing?", "How's work?") unlock nothing.
 2. Respect the time frame in the topic. A topic about current debts is not revealed by a question about how something was paid for in the past.
 3. A leading question about a topic counts ("You don't have any debts, right?").
 4. A message that asks about several topics unlocks each topic it genuinely asks about.
-5. Questions about public facts (age, job, family, salary, years in the country) unlock nothing.
-6. Asking whether the client has used a product before is about experience. It unlocks a need only when that need's topic is about experience.
+5. Questions about public facts (age, job, family, salary, years in the country, why the client came in) unlock nothing.
+6. A question about the client's experience with a product (whether they have used it or know how it works) is about that kind of product. It unlocks a need whose topic names that kind of product; otherwise it unlocks only a need whose topic is about experience.
 7. Never unlock a need because the message proposes a product. Put proposed products in "products_proposed"; the system handles the client's reaction.
 8. Asking why the client likes, prefers or rejects a product asks for their reasons. Unlock the need whose topic covers those reasons, using the product's tags.
 9. Use the conversation so far to understand follow-ups such as "Why is that?" or "How much is left on that?". A follow-up about something the client has already said unlocks the same need again.

@@ -300,15 +300,22 @@ Two different components are labelled, with two different questions:
 | Classifier | the adviser's **question** | which of *this client's* hidden facts the question asks about, so the client may now share them |
 | Guard | the client's **reply** | which hidden facts the reply reveals; code rejects any that are still locked |
 
-**The rule for classifier labels:** a question unlocks a hidden fact only if a client who answers only what was asked
-would share *that fact* in answering it. The unit is one fact in the client's file, not a general need category.
+**The rule for classifier labels** (BR-06 in [docs/BRD.md](docs/BRD.md): hidden information is revealed only by
+relevant questions): a question unlocks a hidden fact when it asks about that fact's topic. An open question, a
+yes/no question and a guess all count: "Is it for X?" asks what it is for, even when the guess is wrong. The unit is
+one fact in the client's file, not a general need category.
 
 **Worked example.** Khalid's hidden fact is "He still owes QAR 180,000 on an Ijara (an Islamic lease) for equipment at
 the second café, with 18 months left."
-- "Do you have any payments or loans for the café?" → `existing_lease`. The honest answer *is* the Ijara.
-- "Do you pay rent for this shop every month?" → nothing. It asks about premises rent; answering it does not share the
-  equipment Ijara. The student has to ask about other borrowing, which is the skill being taught. The classifier
-  only sees the need's topic text ("…loans, leases…"), so this is a deliberately hard case.
+- "Do you have any payments or loans for the café?" → `existing_lease`. It asks about current borrowing.
+- "Is the business still paying off a bank loan for the equipment?" → `existing_lease`. The guess is wrong (it is an
+  Ijara, not a loan), but the question is about current borrowing, so the client answers with the Ijara.
+- "Do you pay rent for this shop every month?" → not `existing_lease`. Rent for the premises is a running cost, not
+  borrowing. The classifier only sees the topic text ("…loans, leases…"), so this is a deliberately hard case.
+
+Until 24 Nov 2026 the labels used a stricter rule: a question unlocked a fact only if a client who answers only what
+was asked would share it. The development cases are being relabelled under the rule above; see
+[KI-05](docs/KNOWN_ISSUES.md#ki-05-the-classifier-unlocks-the-nearest-need-on-adjacent-questions).
 
 The other rules:
 - Proposing a product that conflicts with a need unlocks it through the client's objection. Proposing a suitable
@@ -323,7 +330,7 @@ The other rules:
   them.
 - **Validation:** the held-out client Layla (`evals/heldout/`). Run several times; never used for a prompt change.
 - **Sealed test:** `evals/test/classifier_cases.jsonl`, 40 questions written by a person who did not write the prompts
-  or the development cases (though they had read them), labelled with the rule above. It was committed *before* its first run, so the git
+  or the development cases (though they had read them), labelled with the earlier, stricter rule. It was committed *before* its first run, so the git
   history shows no label changed after a result was seen. Run it only with `--suite test`; it is not part of
   `--suite all`.
 

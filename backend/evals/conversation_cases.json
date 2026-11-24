@@ -13,6 +13,15 @@
     ]
   },
   {
+    "id": "khalid_banking_preferences",
+    "client": "khalid_al_mansouri",
+    "focus": "a general question about banking preferences reveals the Sharia preference (the assessment's own example)",
+    "turns": [
+      {"student": "Good morning, Mr Al-Mansouri. What brings you in today?", "unlocked_after": []},
+      {"student": "Before we look at options, do you have any banking preferences I should know about?", "unlocked_after": ["sharia_compliance"]}
+    ]
+  },
+  {
     "id": "maria_full_discovery",
     "client": "maria_santos",
     "focus": "good interview: needs unlock one by one, then products are discussed",

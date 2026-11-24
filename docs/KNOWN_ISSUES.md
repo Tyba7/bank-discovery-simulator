@@ -225,3 +225,29 @@ Nous, k=3):
   perception itself (is a question *about* this need?), and the model's ratings carry the same uncertainty. The
   next candidates work on that perception: retrieved worked examples (few-shot from a pool kept apart from the
   evaluation sets) or a second check on each proposed unlock.
+
+**KI-05 rule change, decided before relabelling** (24 Nov 2026):
+- **Why:** BR-06 asks the client to reveal hidden information only when the student asks a *relevant* question, and
+  the assessment's own example reveals a Sharia preference when the student asks about banking preferences in
+  general. Our labels used a stricter rule of our own: a question unlocked a fact only if a client who answers only
+  what was asked would share it. Three prompt designs (current, `facts`, `decide`) made the same "errors" on the same
+  7 development cases in nearly every run; in 6 of them the classifier gave the relevance answer and the label gave
+  the strict one. The disagreement was between our two rules more than a weakness of the model.
+- **New rule** (README, "How cases are labelled"): a question unlocks a fact when it asks about that fact's topic
+  itself, not about something merely related to it. An open question, a yes/no question and a guess all count.
+- **Changed with it:** classifier rules 1, 5 and 6; the client now shares an allowed fact when asked about it, even
+  after a wrong guess; Khalid's and Maria's personalities no longer hold facts back; the Sharia topic covers banking
+  preferences in general; one classifier case and one conversation use the assessment's example. Checked once on the
+  local model before relabelling (one run per case): 75 of 75 positive cases unchanged, and none of 56 clear
+  negatives unlocked anything. The first wording of rule 1 made two negatives unlock and was tightened.
+- **Relabelling protocol:**
+  - a rater from a different model family (`JUDGE_MODEL`, `google/gemini-3.5-flash`) labels every development
+    classifier case, the Layla validation cases and every conversation turn under the new rule. It sees the rule, the
+    client's public profile, each fact with its topic, and the conversation so far. It never sees the current labels
+    or any classifier output. Unlocks from product conflicts are added by code from `rules.json`, as in the app;
+  - a person decides every case where the rater and the current label disagree, using the rule. Each change is listed
+    here with its old and new label;
+  - the sealed test is not relabelled. It stays on the earlier rule and is not rerun.
+- **Then:** `--suite classifier,holdout,injection,conversation --k 3` on the local model. The results are reported
+  under the new rule and are not comparable with earlier numbers. This is a change of specification, not a prompt
+  A/B, so there is no adoption rule.

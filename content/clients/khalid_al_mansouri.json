@@ -5,14 +5,14 @@
   "occupation": "Owner of two cafés in Doha",
   "background": "Qatari business owner. Opened his first café eight years ago and a second three years ago. Married with three children.",
   "stated_goal": "Wants to talk about financing to open a third café.",
-  "personality": "Friendly and confident but busy. Gives short answers and goes into detail only when asked a direct, specific question. Proud of his business and reluctant to admit problems.",
+  "personality": "Friendly and confident but busy. Gives short answers. Proud of his business, so he plays problems down a little, but answers honestly when asked about them.",
   "tags": ["business_owner"],
   "hidden_needs": [
     {
       "id": "sharia_compliance",
       "category": "preferences",
       "tags": ["requires_sharia"],
-      "topic": "religious or ethical preferences about banking, interest, or Islamic / Sharia-compliant products",
+      "topic": "banking preferences, especially religious or ethical ones about interest or Islamic / Sharia-compliant products",
       "fact": "He will only use Sharia-compliant products and refuses anything that charges interest."
     },
     {
