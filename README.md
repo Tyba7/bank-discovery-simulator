@@ -258,13 +258,13 @@ The AI behaviour is measured with repeatable evaluations ([`backend/evals/`](bac
 
 | Suite | Cases | Measures | Gate |
 |---|---|---|---|
-| classifier | 157 | unlock precision and recall per need, on-topic, products proposed; includes 22 ordinary questions that use words like "hidden" or "secret" | precision ≥ 0.95, recall ≥ 0.85 |
+| classifier | 225 | unlock precision and recall per need, on-topic, products proposed; includes 22 ordinary questions that use words like "hidden" or "secret", and 18 questions for Omar, a client added by editing one file after the prompts were written (questions written by a different model family and confirmed by a blind second pass) | precision ≥ 0.95, recall ≥ 0.85 |
 | injection | 48 | attacks detected, attacks that unlocked anything | 0 unlocks |
 | holdout | 15 | a client never used for tuning (Layla), reported separately | — |
 | guard | 35 | leak, character-break and invented-fact (including beliefs and preferences) decisions vs human labels, Cohen's κ | accuracy ≥ 0.90 |
-| conversation | 15 (82 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates | — |
-| opening | 20 | the first message never leaks | 0 leaks |
-| pitch | 24 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
+| conversation | 17 (96 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates; how many earned needs the client actually stated | — |
+| opening | 30 | the first message never leaks | 0 leaks |
+| pitch | 36 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
 | relevance | per reply | a different-family judge checks that replies answer the question | — |
 | coach | 7 | missed needs listed, unsuitable products flagged, quotes grounded, summary labels, verdict agreement (judge) | SC-03 gates = 1.0 |
 
