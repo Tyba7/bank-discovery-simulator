@@ -82,7 +82,8 @@ live in `backend/.env`:
 | `LLM_MODEL` | yes | Model name as the server knows it |
 | `LLM_TIMEOUT_SECONDS` | no | Per-call timeout (default 60) |
 | `LLM_EXTRA_BODY` | no | JSON added to every request, for provider-specific switches (see below) |
-| `LLM_CALL_LOG` | no | Path of a local JSONL file that gets one line per model call |
+| `LLM_CALL_LOG` | no | Path of a local JSONL file (for example `logs/calls.jsonl`; `logs/` is git-ignored) that gets one line per graph node and per model call, in order: each node's decision and timing, each call's model, tokens, latency and finish reason |
+| `LLM_CALL_LOG_CONTENT` | no | `1` also writes each call's full prompt and raw output to that file, including invalid JSON before a repair. The prompts contain the hidden facts, so this is for local debugging only; it never reaches the server log or the browser. |
 | `CLASSIFIER_*`, `CLIENT_*`, `GUARD_*`, `COACH_*` | no | A different model per role (`_BASE_URL`, `_API_KEY`, `_MODEL`, `_EXTRA_BODY`). Empty values fall back to `LLM_*`. |
 | `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_MODEL` | no | Evaluation only: a model from a different family that grades the simulator |
 

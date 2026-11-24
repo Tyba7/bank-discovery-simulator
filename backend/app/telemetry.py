@@ -10,6 +10,7 @@ import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -34,12 +35,29 @@ def llm_scope(**labels):
         _labels.reset(label_token)
 
 
-def record(call: dict) -> dict:
-    entry = {"ts": datetime.now(UTC).isoformat(timespec="milliseconds"), **_labels.get(), **call}
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
+
+
+def _write(row: dict) -> None:
+    if path := os.environ.get("LLM_CALL_LOG", "").strip():
+        Path(path).parent.mkdir(parents=True, exist_ok=True)  # logs/ is git-ignored, so a fresh clone lacks it
+        with _file_lock, open(path, "a") as f:
+            f.write(json.dumps(row) + "\n")
+
+
+def record(call: dict, content: dict | None = None) -> dict:
+    """content (the request sent and the raw output) goes to the LLM_CALL_LOG file only, and only when
+    LLM_CALL_LOG_CONTENT=1: prompts hold hidden facts and student text, so never the log line or the trace."""
+    entry = {"ts": _now(), **_labels.get(), **call}
     for sink in _sinks.get():
         sink.append(entry)
     log.info("llm_call %s", json.dumps(entry))
-    if path := os.environ.get("LLM_CALL_LOG", "").strip():
-        with _file_lock, open(path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+    with_content = content and os.environ.get("LLM_CALL_LOG_CONTENT", "").strip() == "1"
+    _write({"kind": "call", **entry, **(content if with_content else {})})
     return entry
+
+
+def record_node(entry: dict) -> None:
+    """One row per graph node run (its decision and timing), so the file tells a turn's whole story in order."""
+    _write({"kind": "node", "ts": _now(), **entry})

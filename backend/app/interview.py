@@ -14,7 +14,7 @@ from app.content import Client, Content
 from app.llm import LLM
 from app.prompts import Prompt, variant_options
 from app.suitability import conflicts
-from app.telemetry import llm_scope
+from app.telemetry import llm_scope, record_node
 
 log = logging.getLogger(__name__)
 
@@ -255,6 +255,8 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 update = node(state)
             entry = {"turn": turn, "node": name, "ms": round((time.perf_counter() - start) * 1000)}
             entry.update(update.pop("_detail", {}))
+            events = {"events": update["events"]} if update.get("events") else {}  # failure codes, e.g. CLI-001
+            record_node({"session": session, **entry, **events, "calls": len(calls)})  # its calls have their own rows
             if calls:  # labels already on the trace entry are not repeated per call
                 entry["llm"] = [{k: v for k, v in c.items() if k not in ("node", "turn", "session")} for c in calls]
             return {**update, "trace": [entry]}

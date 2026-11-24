@@ -89,6 +89,55 @@ def test_every_model_call_is_traced_under_its_node(fake_completion):
     assert len(all_calls) == 4 and {c["session"] for c in all_calls} == {"s1"}  # outer scope sees every call
 
 
+LEASE_FACT = "QAR 180,000"  # in Khalid's locked existing_lease fact
+
+
+def run_turn(log_file, monkeypatch, content: str | None):
+    monkeypatch.setenv("LLM_CALL_LOG", str(log_file))
+    if content is not None:
+        monkeypatch.setenv("LLM_CALL_LOG_CONTENT", content)
+    llm = LLM(SETTINGS)
+    graph = build_interview_graph(load_content(), {"classifier": llm, "client": llm, "guard": llm})
+    config = {"configurable": {"thread_id": "s1"}}
+    graph.invoke({"client_id": "khalid_al_mansouri"}, config)
+    graph.invoke({"student_message": "Is the business repaying any borrowing?"}, config)
+    return [json.loads(line) for line in log_file.read_text().splitlines()]
+
+
+def test_call_log_tells_the_turn_in_order_and_keeps_prompts_out_by_default(
+    fake_completion, tmp_path, monkeypatch, caplog
+):
+    caplog.set_level("INFO")
+    rows = run_turn(tmp_path / "logs" / "calls.jsonl", monkeypatch, content=None)  # logs/ does not exist yet
+    assert [(r["kind"], r["node"]) for r in rows if r.get("turn") == 1] == [
+        ("node", "check_input"),
+        ("call", "classify"),  # a call is written when it ends, just before its node's row
+        ("node", "classify"),
+        ("node", "update_unlocked"),
+        ("call", "client_reply"),
+        ("node", "client_reply"),
+        ("call", "guard"),
+        ("node", "guard"),
+        ("node", "finish"),
+    ]
+    classify = next(r for r in rows if r["kind"] == "node" and r["node"] == "classify")
+    assert classify["unlocks"] == ["existing_lease"] and classify["session"] == "s1" and classify["calls"] == 1
+    assert not any("messages" in r or "output" in r for r in rows)
+    assert LEASE_FACT not in caplog.text
+
+
+def test_call_log_content_holds_the_exact_request_and_raw_output(fake_completion, tmp_path, monkeypatch, caplog):
+    caplog.set_level("INFO")
+    rows = run_turn(tmp_path / "calls.jsonl", monkeypatch, content="1")
+    calls = {r["node"]: r for r in rows if r["kind"] == "call" and r.get("turn") == 1}
+    assert calls["classify"]["messages"][-1]["content"].endswith("</message>")
+    assert calls["classify"]["response_format"]["json_schema"]["name"] == "Classification"
+    assert json.loads(calls["classify"]["output"]) == CLASSIFICATION
+    assert calls["client_reply"]["output"] == "We still pay a lease on the café equipment."
+    assert LEASE_FACT in json.dumps(calls["guard"]["messages"])  # the guard sees locked facts: in the file only
+    assert LEASE_FACT not in caplog.text and '"messages"' not in caplog.text  # never in the server log
+
+
 def test_separate_role_clients_are_each_counted_once(fake_completion):
     classifier, coach_llm = LLM(SETTINGS), LLM(replace(SETTINGS, llm_model="big-model"))
     with llm_scope() as calls:
