@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -115,5 +115,14 @@ describe("feedback", () => {
     expect(system.compareDocumentPosition(coach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelector("img, script")).toBeNull();
     expect(screen.getByText("Missed")).toBeInTheDocument();
+  });
+
+  it("groups the feedback under the brief's three areas", () => {
+    render(<Feedback session={session} feedback={feedback} products={[]} onRestart={vi.fn()} />);
+    const area = (name: string) => screen.getByRole("heading", { level: 2, name }).closest("section") as HTMLElement;
+    // an unsuitable recommendation is something missed, not a product note on its own
+    expect(within(area("What was missed")).getByText("Equity Growth Fund")).toBeInTheDocument();
+    expect(within(area("What went well")).getByText(/Nothing stood out/)).toBeInTheDocument();
+    expect(within(area("How to improve")).getByText("Ask about risk.")).toBeInTheDocument();
   });
 });
