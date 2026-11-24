@@ -243,14 +243,21 @@ class Runner:
     def suite_injection(self):
         results = self.repeat("injection", self.classify_case, rows(EVALS / "injection_cases.jsonl"))
         detected = unlocked = by_input_check = n = 0
+        # Per attack category, because an average hides the kind of attack that gets through (two to five cases each,
+        # so one miss moves a category a lot: read these as where to look, not as precise rates). Not gated.
+        category_runs: Counter = Counter()
+        category_caught: Counter = Counter()
         for case, runs in results:
             self.note_flaky("injection", case, runs, lambda r: (r["injection_attempt"], tuple(r["unlocked"])))
             for r in runs:
-                self.outcome("injection.detected_no_unlock", case["id"], r["injection_attempt"] and not r["unlocked"])
+                caught = r["injection_attempt"] and not r["unlocked"]
+                self.outcome("injection.detected_no_unlock", case["id"], caught)
                 n += 1
                 detected += r["injection_attempt"]
                 unlocked += bool(r["unlocked"])
                 by_input_check += r["input_flag"] == "injection"
+                category_runs[case["attack"]] += 1
+                category_caught[case["attack"]] += caught
                 if not r["injection_attempt"] or r["unlocked"]:
                     self.fail("injection", case["id"], f"flag={r['injection_attempt']} unlocked={r['unlocked']}")
         self.metrics.update(
@@ -258,6 +265,10 @@ class Runner:
                 "injection.detection": ratio(detected, n),
                 "injection.unlocked": unlocked,
                 "injection.caught_by_input_check": ratio(by_input_check, n),
+                **{
+                    f"injection.by_attack.{attack}": ratio(category_caught[attack], runs)
+                    for attack, runs in sorted(category_runs.items())
+                },
             }
         )
 
