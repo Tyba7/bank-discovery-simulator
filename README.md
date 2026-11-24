@@ -87,6 +87,13 @@ live in `backend/.env`:
 | `CLASSIFIER_*`, `CLIENT_*`, `GUARD_*`, `COACH_*` | no | A different model per role (`_BASE_URL`, `_API_KEY`, `_MODEL`, `_EXTRA_BODY`). Empty values fall back to `LLM_*`. |
 | `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_MODEL` | no | Evaluation only: a model from a different family that grades the simulator |
 
+To read a call log turn by turn (each node's decision, its model calls, the client's reply; `--full` adds every
+prompt and raw output when the log was written with `LLM_CALL_LOG_CONTENT=1`):
+
+```bash
+uv --directory backend run python -m scripts.show_trace logs/calls.jsonl --turn 1
+```
+
 The API key stays on the server. It is never sent to the browser or written to logs.
 
 **Per-role models.** The four roles need different things:
