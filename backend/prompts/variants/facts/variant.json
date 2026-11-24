@@ -1,0 +1,4 @@
+{
+  "description": "KI-05: the classifier sees each need's fact next to its topic and decides whether an honest answer would share that fact",
+  "classifier_facts": true
+}

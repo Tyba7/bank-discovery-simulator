@@ -173,13 +173,15 @@ class Runner:
         else:
             result = self.timed(
                 "classify",
-                classify_message,
-                self.content,
-                self.llms["classifier"],
-                self.prompts["classifier"],
-                client,
-                case.get("history", []),
-                message,
+                lambda: classify_message(
+                    self.content,
+                    self.llms["classifier"],
+                    self.prompts["classifier"],
+                    client,
+                    case.get("history", []),
+                    message,
+                    show_facts=bool(variant_options(self.variant).get("classifier_facts")),
+                ),
             )
         return {**result, "input_flag": flag, "unlocked": sorted(needs_unlocked_by(self.content, client, result))}
 

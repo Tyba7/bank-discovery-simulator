@@ -146,3 +146,29 @@ def test_security_headers(api):
     headers = api.get("/api/health").headers
     assert headers["x-content-type-options"] == "nosniff" and headers["x-frame-options"] == "DENY"
     assert "script-src 'self'" in headers["content-security-policy"]
+
+
+def test_classifier_reason_never_reaches_the_browser(api, model, monkeypatch):
+    """With facts in the classifier prompt (KI-05), its reason may quote one. That reason must stay server-side."""
+    fact = load_content().clients["khalid_al_mansouri"].hidden_needs[2].fact  # the locked lease fact
+    scripted = litellm.completion
+
+    def leaky_classifier(**kwargs):
+        if kwargs.get("response_format", {}).get("json_schema", {}).get("name") == "Classification":
+            return reply(
+                {
+                    "reason": f"The client would say: {fact}",
+                    "unlocks": [],
+                    "products_proposed": [],
+                    "on_topic": True,
+                    "injection_attempt": False,
+                    "question_type": "open",
+                }
+            )
+        return scripted(**kwargs)
+
+    monkeypatch.setattr(litellm, "completion", leaky_classifier)
+    sid = start(api)
+    replies = [api.post(f"/api/sessions/{sid}/messages", json={"message": q}).text for q in ("Hi?", "How is business?")]
+    seen = " ".join([*replies, api.get(f"/api/sessions/{sid}").text, api.get(f"/api/sessions/{sid}/export").text])
+    assert fact not in seen and "180,000" not in seen

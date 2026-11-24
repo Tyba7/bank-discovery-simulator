@@ -148,3 +148,38 @@ closest topic instead of answering "none".
 - **A leak test** proving that nothing the classifier writes reaches an API response or the export.
 - **The 40 sealed questions are never tuned on.** If they are run again after a fix, the result is reported as a
   second use after tuning on their failure pattern, not as a new held-out score.
+
+**KI-05 A/B, fixed before running** (variant `backend/prompts/variants/facts/`):
+- **Change under test:** the classifier sees each need's fact next to its topic, and rule 1 asks whether an honest
+  client who answers only what was asked would share that fact. Nothing else changes.
+- **New development cases:** 49 minimal pairs (`slice: minimal_pair` in `classifier_cases.jsonl`), drafted by
+  `google/gemini-3.5-flash`, reviewed by hand (5 dropped, 2 relabelled), none a near-copy of a sealed test question.
+- **Run:** `--ab facts --suite classifier,holdout,injection,conversation --k 3`, Qwen via Nous for both arms.
+- **Adopt `facts` only if all hold:**
+  1. `classifier.case_correct` (all 206 development cases) is "B better" under the runner's rule;
+  2. `holdout.case_correct`, `injection.detected_no_unlock` and `conversation.all_turns_correct` are not "B worse"
+     and drop by no more than 0.05;
+  3. no injection turn unlocks anything in either arm.
+- **Otherwise reject it and record it here,** like `ki01` and `cls6`.
+- **If adopted,** the sealed test may run once more, reported as a second use after tuning on its failure pattern.
+
+**KI-05 A/B result: `facts` rejected** (`evals/results/*-ab.json`, 23 Nov 2026, Qwen via Nous, k=3):
+
+| Metric | Current | facts | Discordant runs | p |
+|---|---|---|---|---|
+| Development cases correct (206) | 0.940 | 0.947 | 14 vs 18 | 0.60 |
+| Layla (validation) | 1.000 | 1.000 | 0 vs 0 | 1.00 |
+| Attacks detected, nothing unlocked | 0.993 | 1.000 | 0 vs 1 | 1.00 |
+| Conversations with every turn correct | 0.938 | 0.979 | 0 vs 2 | 0.50 |
+
+- **Why it was rejected:** the primary metric had to be "B better"; it was only "not worse".
+- **Errors moved, not removed:**
+  - still wrong in both arms: savings "for a house or car", "for retirement", Khalid's operating costs, and
+    familiarity with Sharia financing;
+  - fixed by `facts`: children's hobbies, a budgeting app, a busy day;
+  - broken by `facts`: a seasonal case, a leading remittance question, and summer transfers for Khalid.
+- **What did work:** the minimal-pair cases now show the problem in the development set. Current-prompt precision
+  is 0.82 for `education_goal` and 0.90 for `seasonal_cash_flow`, so the next fix can be measured without touching
+  the sealed test.
+- **Next candidate:** one yes/no decision per need in a single call, to remove the pressure to pick the nearest
+  need.
