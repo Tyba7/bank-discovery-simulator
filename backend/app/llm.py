@@ -104,11 +104,12 @@ class LLM:
         **extra,
     ) -> str:
         call = {"model": self.s.llm_model, "json_mode": mode, "attempt": attempt, "max_tokens": max_tokens}
+        sent = {"messages": messages, **({"response_format": extra["response_format"]} if extra else {})}
         start = time.perf_counter()
         try:
             response = litellm.completion(messages=messages, **extra, **self._params(temperature, max_tokens))
         except Exception as e:
-            record({**call, "status": "error", "error": type(e).__name__, "ms": _ms(start)})
+            record({**call, "status": "error", "error": type(e).__name__, "ms": _ms(start)}, sent)
             raise
         choice, usage = response.choices[0], getattr(response, "usage", None)
         truncated = choice.finish_reason == "length"
@@ -122,7 +123,8 @@ class LLM:
                 "cost": _cost(response),
                 "finish": choice.finish_reason,
                 **({"code": "LLM-002"} if truncated else {"code": "LLM-003"} if attempt > 1 else {}),
-            }
+            },
+            {**sent, "output": choice.message.content},
         )
         if truncated:
             log.warning("LLM-002 reply truncated at max_tokens=%s", max_tokens)

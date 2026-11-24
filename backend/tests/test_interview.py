@@ -53,5 +53,7 @@ def test_sessions_do_not_share_state(graph):
 
 def test_every_node_run_is_traced(graph):
     state = say(graph, start(graph, "maria_santos", "trace"), "How long have you lived in Qatar?")
+    assert [t["turn"] for t in state["trace"] if t["node"] == "opening"] == [0]  # not counted as a student turn
+    assert all(t["turn"] == 1 for t in state["trace"] if t["node"] != "opening")
     nodes = [t["node"] for t in state["trace"] if t["node"] != "opening"]
     assert nodes[:4] == ["check_input", "classify", "update_unlocked", "client_reply"] and "finish" in nodes
