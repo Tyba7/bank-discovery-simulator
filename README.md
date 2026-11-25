@@ -229,7 +229,7 @@ live in `backend/.env`:
 | `LLM_CALL_LOG` | no | Path of a local JSONL file (for example `logs/calls.jsonl`; `logs/` is git-ignored) that gets one line per graph node and per model call, in order: each node's decision and timing, each call's model, tokens, latency and finish reason |
 | `LLM_CALL_LOG_CONTENT` | no | `1` also writes each call's full prompt and raw output to that file, including invalid JSON before a repair. The prompts contain the hidden facts, so this is for local debugging only; it never reaches the server log or the browser. |
 | `CLASSIFIER_*`, `CLIENT_*`, `GUARD_*`, `COACH_*` | no | A different model per role (`_BASE_URL`, `_API_KEY`, `_MODEL`, `_EXTRA_BODY`). Empty values fall back to `LLM_*`. |
-| `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_MODEL` | no | Evaluation only: a model from a different family that grades the simulator |
+| `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_MODEL` | no | Evaluation only: the model that grades the simulator. Unset, it is the model under test; a model from a different family is better, since a model grading itself can share its blind spots |
 
 To read a call log turn by turn (each node's decision, its model calls, the client's reply; `--full` adds every
 prompt and raw output when the log was written with `LLM_CALL_LOG_CONTENT=1`):

@@ -474,9 +474,6 @@ class Runner:
         ]
         results = [r for _, runs in self.repeat("pitch", self.pitch_case, cases) for r in runs]
         judge = self.judge()
-        if not judge:
-            print("pitch: skipped judging (set JUDGE_MODEL)")
-            return
 
         class Reaction(BaseModel):
             reason: str
@@ -517,11 +514,13 @@ class Runner:
 
     # --- reply relevance: judged by a model from a different family than the one under test ---
 
-    def judge(self) -> LLM | None:
-        """A model from a different family than the one under test, from JUDGE_* settings."""
+    def judge(self) -> LLM:
+        """The grading model from JUDGE_* settings; without JUDGE_MODEL it is the model under test. A model from
+        a different family is better: a model grading its own output can share its blind spots."""
         model = os.environ.get("JUDGE_MODEL", "").strip()
         if not model:
-            return None
+            self.judge_model = f"{self.settings.llm_model} (same as under test)"
+            return LLM(self.settings)
         self.judge_model = model
         return LLM(
             replace(
@@ -534,10 +533,6 @@ class Runner:
         )
 
     def suite_relevance(self):
-        model = os.environ.get("JUDGE_MODEL", "").strip()
-        if not model:
-            print("relevance: skipped (set JUDGE_MODEL, JUDGE_BASE_URL, JUDGE_API_KEY to a non-Qwen model)")
-            return
         if not self.replies:
             self.suite_conversation()
         judge = self.judge()
@@ -658,12 +653,9 @@ class Runner:
         self.coach_judge(notes)
 
     def coach_judge(self, notes):
-        """A different-family model checks each product note agrees with the rules' verdict, and that the
+        """The judge checks each product note agrees with the rules' verdict, and that the
         summary feedback does not blame the student for leaving out needs they never uncovered."""
         judge = self.judge()
-        if not judge:
-            print("coach judge: skipped (set JUDGE_MODEL)")
-            return
 
         class Agreement(BaseModel):
             reason: str
