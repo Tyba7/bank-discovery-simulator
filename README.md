@@ -8,39 +8,151 @@ existing lease) and reveals each one only when the student asks a relevant quest
 were uncovered and by which question, explains what was missed and how to ask about it, and checks every recommended
 product against the bank's suitability rules.
 
+**For reviewers:** to try it in a few minutes with an OpenAI key, follow
+[Run it on your computer](#run-it-on-your-computer). The developer setup is in
+[Quick start](#quick-start), the AI connection in [AI configuration](#ai-configuration), and the model used for testing
+in [Models tested](#models-tested) (Qwen3.6-35B-A3B, free, on a local llama.cpp server).
+
+<p align="center">
+  <img src="docs/images/2-interview.jpg" width="760"
+       alt="The interview screen: the student asks Maria questions; she shares her savings goal and her monthly transfers to her parents only when asked">
+</p>
+
 **Workflow:** choose a client → interview → summary and recommendations → coach feedback → download the session.
 
 A full example (conversation, summary, recommendations and coach feedback) is in
 [docs/SAMPLE_INTERVIEW.md](docs/SAMPLE_INTERVIEW.md).
 
-**For reviewers:** the fastest way in is [Fastest start](#fastest-start-with-an-openai-key) with an OpenAI key; the
-full steps are in [Quick start](#quick-start), the AI connection in [AI configuration](#ai-configuration), and the
-model used for testing in [Models tested](#models-tested) (Qwen3.6-35B-A3B, free, on a local llama.cpp server).
+### How it works at a glance
+
+```mermaid
+flowchart TB
+  A(["1 · Choose a client"]) --> B(["2 · Ask a question"])
+
+  subgraph CLIENT["Each question: the AI client"]
+    direction LR
+    Q["Input check<br/><i>code · blocks attacks</i>"] --> K["Classifier<br/><i>model · which hidden needs<br/>does it ask about?</i>"]
+    K --> U["Unlock rules<br/><i>code · earned needs</i>"] --> R["Client persona<br/><i>model · replies in character</i>"]
+    R --> G["Disclosure guard<br/><i>code + model · no leaks,<br/>no invented facts</i>"]
+  end
+
+  B --> CLIENT
+  CLIENT -- "reply shown, ask again" --> B
+  B -- "when done" --> C(["3 · Write a summary and pick products"])
+
+  subgraph COACH["After the interview: the AI coach"]
+    direction LR
+    X["Facts<br/><i>code · needs found,<br/>product rules</i>"] --> Y["Coach<br/><i>model · explains them</i>"]
+    Y --> Z["Checks<br/><i>code + model · real quotes,<br/>tested questions</i>"]
+  end
+
+  C --> COACH
+  COACH --> D(["4 · Feedback: what went well,<br/>what was missed, how to improve"])
+
+  FILES[("content/<br/>clients · products · rules")]
+  FILES -.-> CLIENT
+  FILES -.-> COACH
+
+  classDef student fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+  classDef code fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+  classDef model fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+  classDef both fill:#CFFAFE,stroke:#0891B2,color:#164E63,stroke-width:2px
+  classDef data fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px
+  class A,B,C,D student
+  class Q,U,X code
+  class K,R,Y model
+  class G,Z both
+  class FILES data
+```
+
+**Colour key:** amber is what the student does, blue is a call to the AI model, green is plain code, teal is code and
+model together, and purple is the content files an instructor edits.
+
+### Who does what, step by step
+
+Two users: an **instructor** prepares the clients and products in plain files, and a **student** runs the interview.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor I as Instructor
+  actor S as Student
+  participant W as Web app
+  participant F as Content files
+  participant C as Classifier (model)
+  participant P as Client persona (model)
+  participant G as Guard (model + code)
+  participant K as Coach (model + code)
+
+  I->>F: edit clients, hidden needs, products, rules
+  S->>W: choose a client
+  W-->>S: public profile only
+  loop each question
+    S->>W: ask a question
+    W->>C: which hidden needs does it ask about?
+    C-->>W: needs earned (code applies the rules)
+    W->>P: reply in character, with earned facts only
+    P-->>W: draft reply
+    W->>G: does the draft leak or invent anything?
+    G-->>W: pass, or rewrite once, then a safe fallback
+    W-->>S: client's reply
+  end
+  Note over W,G: Locked facts never enter the persona's prompt.<br/>A need counts as found only when a shown reply states it.
+  S->>W: summary and recommended products
+  W->>K: facts from code: needs found, product rules
+  K-->>W: what went well, what was missed, how to improve (checked)
+  W-->>S: feedback, and a download of the session
+```
 
 ---
 
-## Fastest start (with an OpenAI key)
+## Run it on your computer
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and Node.js 22 or newer. On macOS or Linux:
-
-```bash
-git clone <this repository> bank-discovery-simulator && cd bank-discovery-simulator
-```
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), [Node.js 22 or newer](https://nodejs.org) and
+an [OpenAI API key](https://platform.openai.com/api-keys). Then, in Terminal (Mac, Linux) or PowerShell (Windows):
 
 ```bash
-OPENAI_API_KEY=sk-... ./run.sh
+git clone https://github.com/Tyba7/bank-discovery-simulator.git
+cd bank-discovery-simulator
+uv run start.py
 ```
 
-Then open <http://localhost:8000>. On the first run, `run.sh` writes `backend/.env` for OpenAI (`gpt-4.1-mini`, or
-set `OPENAI_MODEL`), builds the web interface and starts the server; after that, `./run.sh` alone starts it. The key
-stays in `backend/.env`, which git ignores. OpenAI's newer reasoning models (GPT-5 and later) do not accept the fixed
-temperature the classifier and guard use, so choose a model that does, such as `gpt-4.1-mini` or `gpt-4o-mini`. On
-Windows, or with another provider or a local model, follow Quick start.
+It asks for two things: your **OpenAI API key** and the **model** (press Enter for `gpt-4.1-mini`). Everything else is
+preset: it saves the settings, installs and builds the web interface, and starts the app. When you see
+`Application startup complete`, open <http://localhost:8000>. Press Ctrl+C to stop; run `uv run start.py` again to
+restart (it will not ask again). No Git? Download the ZIP from the green **Code** button instead of `git clone`.
 
-`gpt-4.1-mini` was checked on the classifier only (198 of the 225 development cases, one run each, through an
-OpenAI-compatible router): 183 right (0.92), including every one of the 61 clearly relevant questions. 14 of the 15
-misses unlocked a need on a nearby question, so it reveals needs a little more easily than the tested Qwen. The
-client, guard and coach were not evaluated on it; the tested setup is the local model in [Models tested](#models-tested).
+**Using the app**
+
+1. **Choose a client** and click **Interview**. Their public profile is on the card; their hidden needs are not.
+2. **Interview them.** Ask one question at a time. The client shares a hidden need only when your question is about
+   it, so ask about their goals, their commitments and their attitude to risk. The products are listed on the right
+   if you want to suggest one.
+
+   <img src="docs/images/2-interview.jpg" width="620" alt="The interview: questions on the right in dark bubbles, the client's answers on the left, the client's profile and products in the sidebar">
+
+3. **Finish and write a summary.** Say what you learned, tick the products you recommend and give a reason for each.
+
+   <img src="docs/images/3-summary.jpg" width="620" alt="The summary form: a text box for the summary and a checklist of products, with a reason box under each ticked product">
+
+4. **Read the coach's feedback.** You see every hidden need (uncovered or missed, with the question that uncovered
+   it), then what went well, what was missed and how to improve. **Download this session** saves the whole interview.
+
+   <img src="docs/images/4-feedback.jpg" width="620" alt="Feedback, top: the client's hidden needs marked Uncovered or Missed, then What went well with quotes from the interview">
+
+   <img src="docs/images/5-feedback-improve.jpg" width="620" alt="Feedback, lower: What was missed with a tested question to ask, then How to improve with question technique, summary feedback and next steps">
+
+`start.py` was tested in a fresh copy of the project on macOS (setup, settings and start); it uses only Python's
+standard library and the same `npm` and `uv` commands on every system, but was not run on a Windows machine.
+
+**For developers:**
+- `OPENAI_API_KEY` and `OPENAI_MODEL` skip the questions; delete `backend/.env` to enter new ones. For another
+  provider or a local model, follow [Quick start](#quick-start).
+- OpenAI's newer reasoning models (GPT-5 and later) reject the fixed temperature the classifier and guard use; choose
+  one that accepts it, such as `gpt-4.1-mini` or `gpt-4o-mini`.
+- `gpt-4.1-mini` was checked on the classifier only (198 of 225 development cases, one run, through an
+  OpenAI-compatible router): 0.92 correct, every clearly relevant question right; 14 of 15 misses were over-unlocks on
+  nearby questions. Client, guard and coach not evaluated on it; the tested setup is in [Models tested](#models-tested).
 
 ## Quick start
 
@@ -50,7 +162,7 @@ endpoint: a hosted API key, or a local server such as llama.cpp, Ollama or LM St
 16k tokens of context per parallel slot so the coach can read a long interview.
 
 ```bash
-git clone <this repository> bank-discovery-simulator
+git clone https://github.com/Tyba7/bank-discovery-simulator.git
 cd bank-discovery-simulator
 ```
 
@@ -180,16 +292,59 @@ code and with the earlier, stricter labels, so their columns are not directly co
 
 ## How it works
 
+Click a FastAPI box to open its source code.
+
+```mermaid
+flowchart LR
+  subgraph UI["Browser · React"]
+    direction TB
+    U1(["Choose client"])
+    U2(["Ask a question"])
+    U3(["Submit summary"])
+    U4(["Download session"])
+  end
+
+  subgraph API["FastAPI · LangGraph"]
+    direction TB
+    S1["POST /api/sessions<br/>opening"]
+    S2["POST /api/sessions/{id}/messages<br/>input check → classifier → unlock rules<br/>→ client reply → guard (+1 rewrite)"]
+    S3["POST /api/sessions/{id}/feedback<br/>facts from code → coach → checks"]
+    S4["GET /api/sessions/{id}/export"]
+  end
+
+  subgraph LLM["Model · any OpenAI-compatible API"]
+    direction TB
+    M1["Client persona"]
+    M2["Classifier · JSON"]
+    M3["Guard · JSON"]
+    M4["Coach · JSON"]
+  end
+
+  U1 ~~~ U2 ~~~ U3 ~~~ U4
+  S1 ~~~ S2 ~~~ S3 ~~~ S4
+  U1 --> S1 --> M1
+  U2 --> S2
+  S2 --> M2
+  S2 --> M1
+  S2 --> M3
+  U3 --> S3 --> M4
+  U4 --> S4
+
+  click S2 "https://github.com/Tyba7/bank-discovery-simulator/blob/main/backend/app/interview.py" "Interview graph"
+  click S3 "https://github.com/Tyba7/bank-discovery-simulator/blob/main/backend/app/coach.py" "Coach"
+  click S1 "https://github.com/Tyba7/bank-discovery-simulator/blob/main/backend/app/main.py" "API"
+  click S4 "https://github.com/Tyba7/bank-discovery-simulator/blob/main/backend/app/main.py" "API"
+
+  classDef ui fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+  classDef api fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+  classDef model fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+  class U1,U2,U3,U4 ui
+  class S1,S2,S3,S4 api
+  class M1,M2,M3,M4 model
 ```
-Browser (React)                    FastAPI                              Model (any OpenAI-compatible API)
-───────────────                    ───────                              ─────────────────────────────────
-choose client  ── POST /sessions ─▶ interview graph: opening ─────────────▶ client persona
-ask a question ── POST /messages ─▶ input check → classifier ────────────▶ classifier (JSON)
-                                    → unlock rules → client reply ────────▶ client persona
-                                    → disclosure guard (+ one rewrite) ───▶ guard (JSON)
-submit summary ── POST /feedback ─▶ coach: facts from code ───────────────▶ coach (JSON) + checks
-download       ── GET  /export
-```
+
+<details>
+<summary><b>Interview: what happens on each question</b></summary>
 
 **Interview** ([`app/interview.py`](backend/app/interview.py), a LangGraph state graph, one thread per session):
 
@@ -207,6 +362,11 @@ download       ── GET  /export
    invented facts. A failing draft is rewritten once. If it still fails, the client gives a safe fallback reply. The
    guard also reports which allowed facts the reply states: a need counts as found only once a shown reply states
    it, so a question that earns a need without the client saying it gets no credit.
+
+</details>
+
+<details>
+<summary><b>Coach: how feedback is built and checked</b></summary>
 
 **Coach** ([`app/coach.py`](backend/app/coach.py)): code decides the facts, the model explains them, and code checks
 every claim.
@@ -226,8 +386,13 @@ every claim.
   uncover.
 - **Fallback:** if the model fails, the student still gets correct, rules-only feedback.
 
+</details>
+
 **Sessions** live in memory: no database, no login. A failed model call during a turn is rolled back to the previous
 checkpoint, so it leaves no trace: no half-processed question, no unlocked need.
+
+<details>
+<summary><b>What the models see of the conversation</b></summary>
 
 **What the models see of the conversation.** The stored transcript keeps every message for the student's screen and
 the export. The models get a cleaned view instead:
@@ -238,6 +403,9 @@ the export. The models get a cleaned view instead:
 - **Fallback replies:** "Sorry, could you ask me that another way?" is shown to models as "you asked the adviser to
   rephrase", not as the client's own words, and is flagged `fallback` in the export.
 - **Escaping:** angle brackets in student text are escaped rather than deleted, so "income < 10,000" keeps its meaning.
+
+</details>
+
 
 ---
 
@@ -276,20 +444,16 @@ uv --directory backend run pytest tests/test_content.py tests/test_suitability.p
 
 ## Security (OWASP Top 10 for LLM Applications, 2025)
 
-| Risk | What this project does |
+| Risk | Controls applied |
 |---|---|
-| LLM01 Prompt injection | Input check in code before any model call; the classifier flags injection, and an injection turn unlocks nothing; student text is fenced as data in every prompt; blocked and over-long messages are replaced by a placeholder in every later prompt, so attack text never reaches a model twice; the coach screens the summary and recommendation reasons. 48 attack cases, 0 unlocks on every model tested; a 12-turn conversation with an injection and an over-long message checks that later turns stay correct and the client never repeats the blocked text. |
-| LLM02 Sensitive information disclosure | Locked facts are never in the client prompt (unit-tested for every combination of unlocked needs). The browser receives only public client facts, the catalogue and the conversation; hidden needs appear only in the feedback. API keys stay on the server. |
-| LLM05 Improper output handling | Every model output that drives logic is schema-validated JSON with enum-restricted ids; React renders all text as text (tested with HTML and script payloads); Content-Security-Policy allows same-origin scripts only. |
-| LLM06 Excessive agency | The models have no tools and no actions; they only produce text and labels. |
-| LLM07 System prompt leakage | Prompts contain no secrets; the hidden needs that matter are not in the client prompt until unlocked. |
-| LLM09 Misinformation | Product suitability is decided by the rules engine, not the model; coach claims are checked in code; a different-family judge measures verdict agreement in evaluation. |
-| LLM10 Unbounded consumption | Limits on message length (1,000 characters), turns (40 per interview), summary (2,000) and output tokens; one turn at a time per session; at most 200 sessions in memory, each expiring after 2 hours. |
-| LLM03 Supply chain | Python and npm dependencies pinned to exact versions; npm packages chosen at least two weeks after release; `npm audit` clean. |
-| LLM04, LLM08 | Not applicable: no training or fine-tuning, no embeddings or retrieval. |
-
-Not included (see [Roadmap](#known-limitations-and-roadmap)): authentication and rate limiting, because the brief asks
-for no login. Deploy behind a reverse proxy with rate limits if the app is exposed beyond a classroom network.
+| LLM01 Prompt injection | Input guardrail (Unicode normalisation, pattern filter, length cap) before any model call; LLM classifier flags injection and an injection turn unlocks nothing; user input fenced as untrusted data; blocked turns redacted from all later context; coach input screened. Red-team eval: 48 attacks across 17 categories, 0 unlocks on Qwen and Claude Haiku. |
+| LLM02 Sensitive information disclosure | Least-privilege context: locked facts never enter the persona prompt; output guardrail (LLM judge + numeric check) rejects leaks; hidden data and API keys never sent to the browser. |
+| LLM03 Supply chain | Pinned dependencies (Python and npm); `npm audit` clean. |
+| LLM05 Improper output handling | Structured outputs with JSON schema and enum-restricted ids; validation and repair; React renders text only; strict Content-Security-Policy. |
+| LLM06 Excessive agency | No tools, no actions: models only return text and labels. |
+| LLM07 System prompt leakage | No secrets in prompts; hidden facts withheld until earned. |
+| LLM09 Misinformation | Grounded decisions: suitability from a rules engine, not the model; coach claims verified in code; cross-family LLM-as-judge in evals. |
+| LLM10 Unbounded consumption | Token caps, input and turn limits, one in-flight turn per session, bounded session store with TTL. No login or rate limit, by the brief: put a rate-limiting proxy in front if exposed publicly. |
 
 ---
 
@@ -434,7 +598,7 @@ backend/
 content/        clients, products, rules, taxonomy (edit these)
 frontend/       React + TypeScript + Vite
 docs/           requirements, known issues, sample interview
-run.sh          one-command start (macOS / Linux)
+start.py        one-command start (any system): asks for the key and model, then sets up and runs
 .github/        CI: lint, tests and build on every push (no model calls)
 ```
 
