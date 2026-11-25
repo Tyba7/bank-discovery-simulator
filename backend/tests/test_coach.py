@@ -50,12 +50,21 @@ GOOD = {
             "better_question": "Is the business still repaying any loans or leases?",
         }
     ],
+    "pitch_mistakes": [
+        {
+            "product_id": "business_overdraft",
+            "turn": 2,
+            "why_unsuitable": "It charges interest and he banks only Islamically.",
+            "better_move": "Ask how he prefers to finance the business before naming a product.",
+        }
+    ],
     "product_notes": [
-        {"product_id": p, "comment": "note"}
-        for p in ("murabaha_business_finance", "business_overdraft", "islamic_savings_account")
+        {"product_id": "murabaha_business_finance", "comment": "Check first: note"},
+        {"product_id": "business_overdraft", "comment": "Unsuitable: note"},
+        {"product_id": "islamic_savings_account", "comment": "Suitable: note"},
     ],
     "question_feedback": "Good open questions.",
-    "next_steps": ["Ask about existing borrowing."],
+    "next_steps": ["At turn 2 you proposed an overdraft; next time ask about existing borrowing first."],
 }
 BAD = {
     **GOOD,
@@ -214,7 +223,7 @@ def test_a_checker_timeout_keeps_the_draft_and_marks_the_suggestion_unverified(m
     [missed] = feedback.missed_needs
     assert missed["checked"] is False and missed["better_question"] == GOOD["missed_needs"][0]["better_question"]
     assert [e["code"] for e in feedback.events] == ["COA-003"]
-    assert all(p["comment"] == "note" for p in feedback.products)  # the model's product notes survive
+    assert all(p["comment"].endswith(": note") for p in feedback.products)  # the model's product notes survive
 
 
 def test_instructions_in_a_recommendation_reason_are_removed_before_the_prompt(model):
@@ -229,3 +238,42 @@ def test_instructions_in_a_recommendation_reason_are_removed_before_the_prompt(m
     assert [e["code"] for e in feedback.events] == ["SEC-001"]
     assert reason not in prompts[0] and "removed: it contained instructions" in prompts[0]
     assert "tries to give you instructions" in prompts[0]
+
+
+def test_a_product_note_that_contradicts_the_shown_verdict_is_dropped(model):
+    llm, drafts, _ = model
+    wrong = [
+        {**n, "comment": "This product is suitable."} if n["product_id"] == "murabaha_business_finance" else n
+        for n in GOOD["product_notes"]
+    ]
+    drafts += [{**GOOD, "product_notes": wrong}] * 2
+    feedback = coach(load_content(), llm, STATE, SUBMISSION)
+    comments = {p["id"]: p["comment"] for p in feedback.products}
+    assert comments["murabaha_business_finance"] == "" and comments["business_overdraft"] == "Unsuitable: note"
+    assert 'must start with its verdict "Check first"' in feedback.checks["problems"][0][0]
+
+
+def test_every_unsuitable_pitch_gets_a_mistake_item_at_its_turn(model):
+    llm, drafts, _ = model
+    wrong_turn = [{**GOOD["pitch_mistakes"][0], "turn": 1}]
+    drafts += [{**GOOD, "pitch_mistakes": wrong_turn}, GOOD]
+    feedback = coach(load_content(), llm, STATE, SUBMISSION)
+    assert "was proposed at turn 2, not 1" in feedback.checks["problems"][0][0]
+    assert feedback.pitch_mistakes == GOOD["pitch_mistakes"]
+
+
+def test_pitch_mistakes_fall_back_to_the_rules(model):
+    llm, drafts, _ = model
+    drafts += [{**GOOD, "pitch_mistakes": []}] * 2
+    feedback = coach(load_content(), llm, STATE, SUBMISSION)
+    [mistake] = feedback.pitch_mistakes
+    assert mistake["product_id"] == "business_overdraft" and mistake["turn"] == 2
+    assert mistake["why_unsuitable"].startswith("Not Sharia-compliant")
+
+
+def test_a_next_step_citing_a_turn_that_does_not_exist_is_dropped(model):
+    llm, drafts, _ = model
+    steps = ["Ask about existing loans before proposing finance.", "At turn 9 you rushed.", GOOD["next_steps"][0]]
+    drafts += [{**GOOD, "next_steps": steps}] * 2
+    feedback = coach(load_content(), llm, STATE, SUBMISSION)
+    assert feedback.next_steps == [steps[0], steps[2]]

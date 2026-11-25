@@ -87,6 +87,7 @@ class Feedback:
     needs: list[dict]
     went_well: list[dict]
     missed_needs: list[dict]
+    pitch_mistakes: list[dict]  # unsuitable products the student proposed during the interview, one per product
     products: list[dict]
     summary: dict
     question_feedback: str
@@ -155,10 +156,28 @@ def reasons_for(a) -> list[str]:
     return list(dict.fromkeys(deciding + checks))
 
 
+# The label the student sees next to each product (product_text); a coach comment must start with the same one.
+OUTCOME_LABEL = {"suitable": "Suitable", "unsuitable": "Unsuitable", "investigate": "Check first", "neutral": "Neutral"}
+TURN_REF = re.compile(r"\bturn (\d+)\b", re.IGNORECASE)
+
+
+def unsuitable_pitches(sheet: FactSheet) -> list[ProductResult]:
+    """Products the student proposed during the interview that the rules rule out for this client."""
+    return [p for p in sheet.products if p.verdict == "unsuitable" and p.discussed_turns]
+
+
 def feedback_model(sheet: FactSheet) -> type[BaseModel]:
     missed = [n.id for n in sheet.needs if not n.discovered]
     product_ids = [p.id for p in sheet.products]
+    pitched = [p.id for p in unsuitable_pitches(sheet)]
     none_allowed = Annotated[list[str], Field(max_length=0)]
+    pitch_mistake = create_model(
+        "PitchMistake",
+        product_id=(one_of(pitched) if pitched else str, ...),
+        turn=(int, ...),
+        why_unsuitable=(str, ...),
+        better_move=(str, ...),
+    )
     point = create_model("Point", turn=(int, ...), quote=(str, ...), point=(str, ...))
     missed_need = create_model(
         "MissedNeed",
@@ -173,6 +192,7 @@ def feedback_model(sheet: FactSheet) -> type[BaseModel]:
         "CoachFeedback",
         went_well=(Annotated[list[point], Field(max_length=3)], ...),
         missed_needs=(list[missed_need] if missed else none_allowed, ...),
+        pitch_mistakes=(list[pitch_mistake] if pitched else none_allowed, ...),
         product_notes=(list[product_note] if product_ids else none_allowed, ...),
         question_feedback=(str, ...),
         next_steps=(Annotated[list[str], Field(min_length=1, max_length=3)], ...),
@@ -216,7 +236,10 @@ def render(prompt: Prompt, sheet: FactSheet, transcript: list[dict], submission:
             line += f' (their reason: "{fence(p.student_reason)}")'
         if p.discussed_turns:
             line += f"; discussed at turn {', '.join(map(str, p.discussed_turns))}"
-        line += f". Verdict knowing everything about the client: {p.verdict}. Reasons: {'; '.join(p.reasons) or 'none'}"
+        line += (
+            f'. Shown to the student as "{OUTCOME_LABEL[p.outcome]}"; verdict knowing everything about the client: '
+            f"{p.verdict}. Reasons: {'; '.join(p.reasons) or 'none'}"
+        )
         if p.to_check:
             line += f". Depends on needs the student did not uncover: {', '.join(p.to_check)}"
         products.append(line)
@@ -247,13 +270,14 @@ def check_draft(
     content: Content, sheet: FactSheet, draft: BaseModel, checker: LLM
 ) -> tuple[dict, list[str], list[str]]:
     """Returns the parts of the draft that hold up, problems with the rest, and checks that could not run."""
-    problems, unverified, kept = [], [], {"went_well": [], "missed_needs": [], "product_notes": []}
-    unsuitable_pitches = {t for p in sheet.products if p.verdict == "unsuitable" for t in p.discussed_turns}
+    problems, unverified = [], []
+    kept = {"went_well": [], "missed_needs": [], "pitch_mistakes": [], "product_notes": [], "next_steps": []}
+    pitch_turns = {t for p in unsuitable_pitches(sheet) for t in p.discussed_turns}
     for p in draft.went_well:
         said = sheet.student_turns[p.turn - 1] if 1 <= p.turn <= len(sheet.student_turns) else ""
         if not (p.quote.strip() and _norm(p.quote) in _norm(said)):
             problems.append(f'the quote "{p.quote[:80]}" is not the student\'s words at turn {p.turn}')
-        elif p.turn in unsuitable_pitches:
+        elif p.turn in pitch_turns:
             problems.append(f"turn {p.turn} proposed an unsuitable product, so it is not something that went well")
         else:
             kept["went_well"].append(p.model_dump())
@@ -277,11 +301,39 @@ def check_draft(
             problems.append(f'the question "{m.better_question}" would not reveal {m.need_id}; ask about its topic')
     for need in (n for n in sheet.needs if not n.discovered and n.id not in seen):
         problems.append(f"missed need {need.id} has no item")
-    noted = {n.product_id: n.comment for n in draft.product_notes}
+    pitched = {p.id: p for p in unsuitable_pitches(sheet)}
+    for m in draft.pitch_mistakes:
+        p = pitched.get(m.product_id)
+        if not p or any(k["product_id"] == m.product_id for k in kept["pitch_mistakes"]):
+            continue
+        if m.turn not in p.discussed_turns:
+            problems.append(
+                f"{m.product_id} was proposed at turn {', '.join(map(str, p.discussed_turns))}, not {m.turn}"
+            )
+        else:
+            kept["pitch_mistakes"].append(m.model_dump())
+    for pid in pitched.keys() - {k["product_id"] for k in kept["pitch_mistakes"]}:
+        problems.append(f"the unsuitable proposal of {pid} has no pitch_mistakes item")
+    noted, wrong_label = {}, set()
+    by_id = {p.id: p for p in sheet.products}
+    for n in draft.product_notes:
+        label = OUTCOME_LABEL[by_id[n.product_id].outcome] if n.product_id in by_id else ""
+        # The rules' label is shown next to the comment: a comment that starts from another verdict contradicts it.
+        if label and not n.comment.strip().strip("\"'“”").lower().startswith(label.lower()):
+            problems.append(f'the note for {n.product_id} must start with its verdict "{label}"')
+            wrong_label.add(n.product_id)
+        else:
+            noted[n.product_id] = n.comment
     kept["product_notes"] = noted
     for p in sheet.products:
-        if p.id not in noted:
+        if p.id not in noted and p.id not in wrong_label:
             problems.append(f"product {p.id} has no note")
+    for step in draft.next_steps:
+        # A step about a missed need may have no turn to cite; a turn it does cite must exist.
+        if all(1 <= int(t) <= len(sheet.student_turns) for t in TURN_REF.findall(step)):
+            kept["next_steps"].append(step)
+        else:
+            problems.append(f'the next step "{step[:60]}" cites a turn that is not in the interview')
     return kept, problems, unverified
 
 
@@ -349,6 +401,17 @@ def assemble(
             "checked": False,
         }
         missed_needs.append({**m, "fact": n.fact, "category": n.category})
+    written = {m["product_id"]: m for m in kept.get("pitch_mistakes", [])}
+    pitch_mistakes = [
+        written.get(p.id)
+        or {
+            "product_id": p.id,
+            "turn": p.discussed_turns[0],
+            "why_unsuitable": " ".join(p.reasons),
+            "better_move": "Check the client's needs against this product's rules before proposing it.",
+        }
+        for p in unsuitable_pitches(sheet)
+    ]
     notes = kept.get("product_notes", {})
     categories = {n.id: content.taxonomy.need_categories[n.category].lower() for n in sheet.needs}
     products = [
@@ -375,9 +438,9 @@ def assemble(
         products=products,
         summary=summary,
         question_feedback=draft.question_feedback if draft else "",
-        next_steps=list(draft.next_steps)
-        if draft
-        else [f"Next time, ask about {n.topic}." for n in sheet.needs if not n.discovered][:3]
+        pitch_mistakes=pitch_mistakes,
+        next_steps=kept.get("next_steps")
+        or [f"Next time, ask about {n.topic}." for n in sheet.needs if not n.discovered][:3]
         or ["Keep asking open questions and checking each product against what you learn."],
         question_stats=dict(sheet.question_types),
     )

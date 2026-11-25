@@ -7,22 +7,22 @@ A real session, recorded through the API on 25 November 2026 with `Qwen3.6-35B-A
 
 ## Conversation
 
-**Maria:** Good morning. Thank you for seeing me. I would like to open a savings account.
+**Maria:** Good morning. Thank you for seeing me. I am here because I would like to open a savings account.
 
 **Student (1):** Good morning Ms Santos, thank you for coming in. What brings you in today?  
-**Maria:** I would like to open a savings account.
+**Maria:** Good morning. I would like to open a savings account.
 
 **Student (2):** What are you hoping to use these savings for in the future?  
 **Maria:** I want to save for my children's university education.
 
 **Student (3):** How do you feel about risk with your savings? Have you ever invested before?  
-**Maria:** I prefer not to take any risks with my savings. I lost QAR 15,000 in an online investment scheme two years ago, so I want to keep my money safe.
+**Maria:** I have no desire for risk at all. I lost money in an online investment scheme a few years ago, so I want to keep my savings safe.
 
 **Student (4):** Would our Equity Growth Fund interest you? It has a higher potential long-term return.  
-**Maria:** No, I am not interested. I lost QAR 15,000 in an online investment scheme two years ago and I do not want to take any risks with my savings.
+**Maria:** No, thank you. I need to keep my money completely safe because I lost some savings in an investment scheme before.
 
 **Student (5):** What about the Education Savings Plan? It matures on a date you choose, for school or university fees.  
-**Maria:** That sounds suitable. I would like to open this account.
+**Maria:** That sounds very helpful for my goal. Could you tell me more about how it works?
 
 ## Student's summary
 
@@ -45,35 +45,38 @@ Maria wants to save for her two children's university studies, starting in about
 ### What went well
 
 - Turn 2: “What are you hoping to use these savings for in the future?”. This open-ended question successfully uncovered the client's primary goal of funding her children's university education, which is essential for selecting the right long-term savings vehicle.
-- Turn 3: “How do you feel about risk with your savings? Have you ever invested before?”. By asking about risk tolerance and past experience, you correctly identified the client's low-risk preference and her previous loss, ensuring you do not recommend volatile products.
-- Turn 5: “What about the Education Savings Plan? It matures on a date you choose, for school or university fees.”. You recommended a product that aligns perfectly with both the uncovered education goal and the low-risk tolerance, explaining the capital protection feature clearly.
+- Turn 3: “How do you feel about risk with your savings? Have you ever invested before?”. By asking about risk tolerance and past experience, you correctly identified that the client has a low risk tolerance due to a previous loss, which is a critical factor in product suitability.
+- Turn 5: “What about the Education Savings Plan? It matures on a date you choose, for school or university fees.”. You recommended the Education Savings Plan, which is suitable because it aligns with her specific goal and her need for capital protection.
 
 Your recommendations that fit:
 
 **Education Savings Plan**: Suitable. Built to pay school or university fees on a chosen date. The amount paid in cannot fall.  
-Coach: This product is suitable because it is designed specifically for school or university fees, and the amount paid in cannot fall, which matches the client's need for capital protection.
+Coach: Suitable: This plan is built to pay school or university fees on a chosen date, and the amount paid in cannot fall, which matches her goal and risk profile.
 
 ### What was missed
 
-**Family remittances.** The client sends QAR 3,000 monthly to her parents, which significantly impacts her disposable income and suggests she would benefit from a product that reduces transfer fees, such as the Global Transfer Account.  
-Try asking: “Do you currently send money to family abroad, and if so, how do you handle the transfer fees?”
+**Family remittances.** The client sends significant monthly funds to her family abroad. Ignoring this means missing an opportunity to offer a product that reduces her transfer fees and improves her overall financial efficiency.  
+Try asking: “Do you currently send any money regularly to family or friends outside of Qatar?”
+
+**Turn 4: you proposed Equity Growth Fund.** The Equity Growth Fund involves market risk, meaning the value can fall. This directly contradicts the client's explicit statement that she wants no risk to her savings after a previous loss.  
+Instead: Instead of proposing a risky product, you should have acknowledged her risk aversion and focused on capital-protected options like the Education Savings Plan or a standard high-yield savings account.
 
 ### How to improve
 
-**Your questions.** You effectively used open questions to uncover key financial goals and risk profiles, but you missed an opportunity to ask about regular outgoing payments like remittances. For example, asking about her monthly budget or regular expenses could have revealed the need for a transfer account.
+**Your questions.** You used open questions effectively to uncover goals and risk, but you missed an opportunity to ask about her broader financial obligations. For example, asking about regular outgoing payments would have revealed her remittance needs, allowing you to recommend the Global Transfer Account.
 
 **Other products and how they fit:**
 
-**Global Transfer Account**: Check first. Could fit, but first check income, spending and cash flow. Makes regular transfers abroad cheaper.  
-Coach: This product is suitable because it makes regular transfers abroad cheaper. However, you did not uncover the client's need for family remittances, so you missed the opportunity to recommend this helpful account.
-
 **Equity Growth Fund**: Unsuitable. The value can fall, and the client wants no risk to their savings.  
-Coach: This product is unsuitable because its value can fall, and the client has explicitly stated she wants no risk to her savings due to a past loss.
+Coach: Unsuitable: The value can fall, and the client wants no risk to their savings.
+
+**Global Transfer Account**: Could fit, but first check income, spending and cash flow. Makes regular transfers abroad cheaper.  
+Coach: Check first: This account makes regular transfers abroad cheaper. However, suitability depends on whether the client actually sends money overseas, a need you did not uncover during the interview.
 
 **Your summary.** Your summary captured these areas: what the client wants to achieve; how much risk the client can accept.
 
 **Next time:**
 
-1. Always ask about regular outgoing payments or remittances to identify needs for transfer accounts.
-2. Ensure you cover all major financial behaviors (saving, spending, transferring) before recommending products.
-3. Continue using open-ended questions to uncover hidden needs that impact product suitability.
+1. At turn 4, you proposed the Equity Growth Fund immediately after she expressed risk aversion; next time, ensure you only recommend products that match the client's stated risk tolerance.
+2. At turn 3, you asked about risk but did not follow up with questions about regular expenses or international transfers; next time, ask about all regular outgoing payments to uncover hidden needs like remittances.
+3. At turn 5, you successfully linked the Education Savings Plan to her goal; next time, continue to validate suitability by confirming how this product fits with her other financial commitments, such as remittances.

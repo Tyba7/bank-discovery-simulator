@@ -64,6 +64,7 @@ export interface Feedback {
     better_question: string;
     checked: boolean;
   }[];
+  pitch_mistakes: { product_id: string; turn: number; why_unsuitable: string; better_move: string }[];
   products: ProductResult[];
   summary: { confirmed: string[]; left_out: string[]; unconfirmed: string[]; feedback: string };
   question_feedback: string;
