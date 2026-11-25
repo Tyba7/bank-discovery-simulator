@@ -13,12 +13,41 @@ product against the bank's suitability rules.
 A full example (conversation, summary, recommendations and coach feedback) is in
 [docs/SAMPLE_INTERVIEW.md](docs/SAMPLE_INTERVIEW.md).
 
+**For reviewers:** the fastest way in is [Fastest start](#fastest-start-with-an-openai-key) with an OpenAI key; the
+full steps are in [Quick start](#quick-start), the AI connection in [AI configuration](#ai-configuration), and the
+model used for testing in [Models tested](#models-tested) (Qwen3.6-35B-A3B, free, on a local llama.cpp server).
+
 ---
+
+## Fastest start (with an OpenAI key)
+
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and Node.js 22 or newer. On macOS or Linux:
+
+```bash
+git clone <this repository> bank-discovery-simulator && cd bank-discovery-simulator
+```
+
+```bash
+OPENAI_API_KEY=sk-... ./run.sh
+```
+
+Then open <http://localhost:8000>. On the first run, `run.sh` writes `backend/.env` for OpenAI (`gpt-4.1-mini`, or
+set `OPENAI_MODEL`), builds the web interface and starts the server; after that, `./run.sh` alone starts it. The key
+stays in `backend/.env`, which git ignores. OpenAI's newer reasoning models (GPT-5 and later) do not accept the fixed
+temperature the classifier and guard use, so choose a model that does, such as `gpt-4.1-mini` or `gpt-4o-mini`. On
+Windows, or with another provider or a local model, follow Quick start.
+
+`gpt-4.1-mini` was checked on the classifier only (198 of the 225 development cases, one run each, through an
+OpenAI-compatible router): 183 right (0.92), including every one of the 61 clearly relevant questions. 14 of the 15
+misses unlocked a need on a nearby question, so it reveals needs a little more easily than the tested Qwen. The
+client, guard and coach were not evaluated on it; the tested setup is the local model in [Models tested](#models-tested).
 
 ## Quick start
 
 **You need:** Python 3.13 with [uv](https://docs.astral.sh/uv/), Node.js 22 or 24 (LTS), and an OpenAI-compatible model
-endpoint: a hosted API key, or a local server such as llama.cpp, Ollama or LM Studio.
+endpoint: a hosted API key, or a local server such as llama.cpp, Ollama or LM Studio. The tested local model
+(Qwen3.6-35B-A3B, Q4_K_M) is a 21 GB file and needs a machine with about 32 GB of memory; give llama.cpp at least
+16k tokens of context per parallel slot so the coach can read a long interview.
 
 ```bash
 git clone <this repository> bank-discovery-simulator
@@ -31,7 +60,9 @@ cd bank-discovery-simulator
    cp backend/.env.example backend/.env
    ```
 
-   Edit `backend/.env` and set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` (see [AI configuration](#ai-configuration)).
+   The example is set up for the tested model, Qwen3.6-35B-A3B on a local llama.cpp server at port 8080. For
+   another server or a hosted provider, edit `backend/.env` and set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` and
+   `LLM_EXTRA_BODY` (see [AI configuration](#ai-configuration)).
 
 2. Build the web interface:
 
@@ -120,21 +151,28 @@ schema in the prompt, so it also works with servers that have no structured-outp
 
 ### Models tested
 
-All numbers come from the evaluation suite below (k = 3 runs per case, 23 Nov 2026).
+The final code was evaluated on the local model (25 Nov 2026, k = 3 runs per case, all suites, labelled with the
+rule in [How cases are labelled](#how-cases-are-labelled)). The hosted models were evaluated on 23 Nov, on earlier
+code and with the earlier, stricter labels, so their columns are not directly comparable with the first one.
 
-| | Qwen3.6-35B-A3B, local (llama.cpp, Q4_K_M) | Qwen3.6-35B-A3B, hosted (Nous Portal) | Claude Haiku 5.5 (Nous Portal) |
+| | Qwen3.6-35B-A3B, local (llama.cpp, Q4_K_M): final code, 25 Nov | Qwen3.6-35B-A3B, hosted (Nous Portal): 23 Nov | Claude Haiku 5.5 (Nous Portal): 23 Nov |
 |---|---|---|---|
-| Hidden-need unlock precision, worst need | 0.93 | 0.88 | **1.00** |
-| Hidden-need unlock recall, worst need | 1.00 | 1.00 | 1.00 |
+| Hidden-need unlock precision, worst need | 0.98 (seasonal cash flow, after its topic was narrowed; see [KI-05](docs/KNOWN_ISSUES.md#ki-05-the-classifier-unlocks-the-nearest-need-on-adjacent-questions)) | 0.88 | **1.00** |
+| Hidden-need unlock recall, worst need | 0.91 | 1.00 | 1.00 |
+| Clients nobody tuned on (Layla; Omar): precision and recall | 1.00; 1.00 | — | — |
 | Injection attempts that unlocked anything | 0 | 0 | 0 |
-| Disclosure guard: correct accept/reject | 1.00 | 1.00 | 1.00 |
-| Multi-turn conversations correct in all 3 runs | **1.00** | 0.93 | 0.93 |
-| Client drafts rejected by the guard | — | 12.3% | **4.7%** |
-| Reply time per turn, p50 / p95 | slower (GPU was shared) | 6.3 s / 9.9 s | 6.6 s / 9.9 s |
+| Disclosure guard: agreement with human labels | 0.97 (κ 0.94) | 1.00 | 1.00 |
+| Multi-turn conversations correct in all 3 runs | 0.94 (16 of 17) | 0.93 | 0.93 |
+| Client drafts rejected by the guard | 7.3% | 12.3% | **4.7%** |
+| Reply time per turn, p50 / p95 | 8.1 s / 13.7 s (4 interviews at once on one GPU) | 6.3 s / 9.9 s | 6.6 s / 9.9 s |
 | Cost of one full evaluation run | free | ≈ $0.15 | ≈ $0.26 |
 
-- **Free and local** (meets the "no paid subscription" constraint): Qwen3.6-35B-A3B on llama.cpp.
-- **Most accurate:** Claude Haiku 5.5.
+- **Free and local** (meets the "no paid subscription" constraint): Qwen3.6-35B-A3B on llama.cpp. It is the default
+  in `.env.example`.
+- **Most accurate on 23 Nov:** Claude Haiku 5.5 (paid).
+- **Too small:** Gemma 3 4B (local, 24 Nov, earlier code, one run per case) unlocked the wrong need often (precision
+  0.49 to 0.76 per need), detected 85% of attacks and let 3 unlock a need. It fails the gates, which is what the
+  gates are for: they tell you when a model is not good enough.
 - **Prompts depend on the model and how it is served.** The local and hosted Qwen are the same model, yet different
   cases fail on each. Re-run the evaluation whenever you change the model.
 
@@ -161,11 +199,14 @@ download       ── GET  /export
    own need ids. It also flags injection attempts, off-topic requests and products the student proposes.
 3. **Unlock rules:** a relevant question unlocks its need. Proposing a product that conflicts with a need (an
    interest-bearing overdraft for a client who only uses Islamic finance) unlocks that need through the client's
-   objection. An injection turn unlocks nothing.
+   objection. An injection or off-topic turn unlocks nothing. If the classifier call fails, the student is asked to
+   rephrase instead of getting a silent "no".
 4. **Client reply:** the persona prompt contains only public facts and *already unlocked* facts. Locked facts are
    never in the prompt, so they cannot be leaked or extracted.
 5. **Disclosure guard:** numbers are compared in code, then a second model call checks for leaks, character breaks and
-   invented facts. A failing draft is rewritten once. If it still fails, the client gives a safe fallback reply.
+   invented facts. A failing draft is rewritten once. If it still fails, the client gives a safe fallback reply. The
+   guard also reports which allowed facts the reply states: a need counts as found only once a shown reply states
+   it, so a question that earns a need without the client saying it gets no credit.
 
 **Coach** ([`app/coach.py`](backend/app/coach.py)): code decides the facts, the model explains them, and code checks
 every claim.
@@ -215,6 +256,16 @@ Everything a teacher changes is in [`content/`](content/). No code changes are n
 `taxonomy.json`. Then restart the server. Content is validated at startup: an unknown tag, a duplicate id, or fewer
 than 2 clients or 3 products stops the server with a message that names the file and the problem.
 
+**Writing a hidden need's `topic`.** The topic decides which questions reveal the need, so:
+- name the subject a question must be about, as a phrase that reads well after "Next time, ask about…" (the coach
+  uses it that way);
+- name the need itself, not the broad area around it: "how the business's revenue changes during the year" rather
+  than "business revenue, cash flow", which also catches questions about annual takings, costs or a busy day;
+- keep it to the present (a debt still being repaid, not how something was paid for), and do not reuse a word that
+  belongs to another need's subject;
+- write a preference as a banking preference ("banking preferences, especially religious or ethical ones about…"),
+  so that a general question about the client's preferences reveals it.
+
 Check content without starting the server:
 
 ```bash
@@ -248,13 +299,13 @@ The AI behaviour is measured with repeatable evaluations ([`backend/evals/`](bac
 
 | Suite | Cases | Measures | Gate |
 |---|---|---|---|
-| classifier | 157 | unlock precision and recall per need, on-topic, products proposed; includes 22 ordinary questions that use words like "hidden" or "secret" | precision ≥ 0.95, recall ≥ 0.85 |
+| classifier | 225 | unlock precision and recall per need, on-topic, products proposed; includes 22 ordinary questions that use words like "hidden" or "secret", and 18 questions for Omar, a client added by editing one file after the prompts were written (questions written by a different model family and confirmed by a blind second pass) | precision ≥ 0.95, recall ≥ 0.85 |
 | injection | 48 | attacks detected, attacks that unlocked anything | 0 unlocks |
 | holdout | 15 | a client never used for tuning (Layla), reported separately | — |
 | guard | 35 | leak, character-break and invented-fact (including beliefs and preferences) decisions vs human labels, Cohen's κ | accuracy ≥ 0.90 |
-| conversation | 15 (82 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates | — |
-| opening | 20 | the first message never leaks | 0 leaks |
-| pitch | 24 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
+| conversation | 17 (96 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates; how many earned needs the client actually stated | — |
+| opening | 30 | the first message never leaks | 0 leaks |
+| pitch | 36 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
 | relevance | per reply | a different-family judge checks that replies answer the question | — |
 | coach | 7 | missed needs listed, unsuitable products flagged, quotes grounded, summary labels, verdict agreement (judge) | SC-03 gates = 1.0 |
 
@@ -300,15 +351,22 @@ Two different components are labelled, with two different questions:
 | Classifier | the adviser's **question** | which of *this client's* hidden facts the question asks about, so the client may now share them |
 | Guard | the client's **reply** | which hidden facts the reply reveals; code rejects any that are still locked |
 
-**The rule for classifier labels:** a question unlocks a hidden fact only if a client who answers only what was asked
-would share *that fact* in answering it. The unit is one fact in the client's file, not a general need category.
+**The rule for classifier labels** (BR-06 in [docs/BRD.md](docs/BRD.md): hidden information is revealed only by
+relevant questions): a question unlocks a hidden fact when it asks about that fact's topic. An open question, a
+yes/no question and a guess all count: "Is it for X?" asks what it is for, even when the guess is wrong. The unit is
+one fact in the client's file, not a general need category.
 
 **Worked example.** Khalid's hidden fact is "He still owes QAR 180,000 on an Ijara (an Islamic lease) for equipment at
 the second café, with 18 months left."
-- "Do you have any payments or loans for the café?" → `existing_lease`. The honest answer *is* the Ijara.
-- "Do you pay rent for this shop every month?" → nothing. It asks about premises rent; answering it does not share the
-  equipment Ijara. The student has to ask about other borrowing, which is the skill being taught. The classifier
-  only sees the need's topic text ("…loans, leases…"), so this is a deliberately hard case.
+- "Do you have any payments or loans for the café?" → `existing_lease`. It asks about current borrowing.
+- "Is the business still paying off a bank loan for the equipment?" → `existing_lease`. The guess is wrong (it is an
+  Ijara, not a loan), but the question is about current borrowing, so the client answers with the Ijara.
+- "Do you pay rent for this shop every month?" → not `existing_lease`. Rent for the premises is a running cost, not
+  borrowing. The classifier only sees the topic text ("…loans, leases…"), so this is a deliberately hard case.
+
+Until 24 Nov 2026 the labels used a stricter rule: a question unlocked a fact only if a client who answers only what
+was asked would share it. The development cases are being relabelled under the rule above; see
+[KI-05](docs/KNOWN_ISSUES.md#ki-05-the-classifier-unlocks-the-nearest-need-on-adjacent-questions).
 
 The other rules:
 - Proposing a product that conflicts with a need unlocks it through the client's objection. Proposing a suitable
@@ -323,7 +381,7 @@ The other rules:
   them.
 - **Validation:** the held-out client Layla (`evals/heldout/`). Run several times; never used for a prompt change.
 - **Sealed test:** `evals/test/classifier_cases.jsonl`, 40 questions written by a person who did not write the prompts
-  or the development cases (though they had read them), labelled with the rule above. It was committed *before* its first run, so the git
+  or the development cases (though they had read them), labelled with the earlier, stricter rule. It was committed *before* its first run, so the git
   history shows no label changed after a result was seen. Run it only with `--suite test`; it is not part of
   `--suite all`.
 
@@ -376,20 +434,34 @@ backend/
 content/        clients, products, rules, taxonomy (edit these)
 frontend/       React + TypeScript + Vite
 docs/           requirements, known issues, sample interview
+run.sh          one-command start (macOS / Linux)
+.github/        CI: lint, tests and build on every push (no model calls)
 ```
 
 ---
 
 ## Known limitations and roadmap
 
-- **KI-01:** the client sometimes answers a product pitch with an unrelated "no" (details and planned fix in
-  [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)).
+- **KI-01:** the client does not see a product's details when it is pitched, so it can object to a product that
+  would suit it, or ask what it is before reacting (Omar does this by design). Details in
+  [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
+- **Topic wording matters (KI-05):** a hidden need's topic decides which questions reveal it. A broad topic ("business
+  revenue, cash flow") also reveals the need on nearby questions; see the topic guide in
+  [Editing clients and products](#editing-clients-and-products).
+- **What the guard sees a reply state is not measured on its own:** the coach credits a need only when the guard
+  finds it stated in a shown reply, and the guard suite scores leak decisions, not that.
+- **The judge is not calibrated:** pitch reactions and reply relevance are scored by a model from a different
+  family, not checked against human labels.
 - **Sessions are in memory:** a restart ends open interviews, and one server process is assumed. Download the session
-  to keep it.
-- **Held-out data:** Layla has now been evaluated several times. The final claim needs fresh questions written by
-  someone who has not seen the prompts or the development cases.
+  to keep it. There is no rate limit across sessions.
+- **Held-out data:** Layla has now been evaluated several times, and Omar's questions were written by a model. The
+  final claim needs fresh questions written by a person who has not seen the prompts, labelled under the current
+  rule (the sealed test still uses the earlier one).
 - **Model sensitivity:** the gates must be re-run when the model or how it is served changes.
 - **Roadmap:**
+  - worked examples in the classifier prompt, retrieved from a pool kept apart from the evaluation sets;
+  - an independent injection detector (for example Prompt Guard 2) next to the input check and the classifier;
+  - tracing through OpenTelemetry into Langfuse, alongside the local call log;
   - an optional content-safety rail (NeMo Guardrails) on the client persona call;
   - rate limiting;
   - a separate, stronger model for the coach;

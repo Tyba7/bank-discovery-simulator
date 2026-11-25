@@ -18,12 +18,12 @@ ROWS = [
     call("classify", 1, "classifier", messages=[QUESTION], output="not json"),
     call("classify", 1, "classifier", attempt=2, code="LLM-003", messages=[QUESTION], output="{}"),
     node("classify", 1, unlocks=["existing_lease"], reason="asks about debt"),
-    node("update_unlocked", 1, added=["existing_lease"]),
+    node("update_unlocked", 1, pending=["existing_lease"]),
     call("client_reply", 1, "client", output="We owe a little."),
     node("client_reply", 1, attempt=1),
     call("guard", 1, "guard"),
     node("guard", 1, leaked=["sharia_compliance"], events=[{"code": "CLI-001", "detail": "sharia_compliance"}]),
-    node("finish", 1),
+    node("finish", 1, added=[], discarded=["existing_lease"]),
     node("opening", 0, session="s2"),
 ]
 
@@ -45,6 +45,20 @@ def test_filters_and_full_mode():
     assert "[output]\n         not json" in full  # the invalid JSON before the repair is visible
     assert "LLM_CALL_LOG_CONTENT=1" in full  # the guard call was logged without content, and says so
     assert render(ROWS, turn=7) == "no matching rows"
+
+
+def test_eval_calls_outside_an_interview_are_grouped_by_arm_and_case():
+    question = {"role": "user", "content": "<conversation>\n</conversation>\n<message>\nAny loans?\n</message>"}
+    rows = [
+        {
+            **call(None, None, "classifier", session=None, messages=[question], output="{}"),
+            "arm": "decide",
+            "case": "p-k-04",
+        },
+        {**call(None, None, "classifier", session=None), "arm": "default", "case": "p-k-04"},
+    ]
+    text = render(rows, session="decide:p-k-04")
+    assert text.startswith('session decide:p-k-04  turn None  "Any loans?"') and "default:" not in text
 
 
 def test_student_text_is_marked_missing_without_content_logging():

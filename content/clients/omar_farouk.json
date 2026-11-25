@@ -1,0 +1,33 @@
+{
+  "id": "omar_farouk",
+  "name": "Omar Farouk",
+  "age": 29,
+  "occupation": "IT support engineer at a telecom company in Doha",
+  "background": "Egyptian, has lived in Doha for four years. Single. Earns QAR 11,000 a month and wants to save around QAR 3,000 of it each month.",
+  "stated_goal": "Wants to start saving some of his salary each month.",
+  "personality": "Polite and careful. Asks what things mean before agreeing. Answers briefly unless the question is specific.",
+  "tags": ["salaried"],
+  "hidden_needs": [
+    {
+      "id": "islamic_only",
+      "category": "preferences",
+      "tags": ["requires_sharia"],
+      "topic": "banking preferences, especially religious or ethical ones about interest or Islamic / Sharia-compliant products",
+      "fact": "He will not use any product that pays or charges interest; it must be Sharia-compliant."
+    },
+    {
+      "id": "car_purchase",
+      "category": "objectives",
+      "tags": ["short_term_goal"],
+      "topic": "what he is saving for, his plans or goals, and when he will need the money",
+      "fact": "He wants to buy a car for about QAR 60,000 in roughly 18 months."
+    },
+    {
+      "id": "family_support",
+      "category": "financial_situation",
+      "tags": ["sends_money_abroad"],
+      "topic": "money he sends to family abroad or other people he supports financially",
+      "fact": "He sends QAR 2,500 every month to his mother in Cairo."
+    }
+  ]
+}

@@ -27,6 +27,10 @@ export function Submit({ session, products, onBack, onFeedback }: Props) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    // Submitting ends the interview, so an empty summary is confirmed rather than sent by accident.
+    if (!summary.trim() && !window.confirm("Submit without a summary? The interview ends and cannot be continued.")) {
+      return;
+    }
     setPending(true);
     setError(null);
     try {

@@ -1,0 +1,4 @@
+{
+  "description": "KI-05: the model rates each need direct / nearby / none in its own field, and code unlocks only the direct ones",
+  "classifier_decide": true
+}

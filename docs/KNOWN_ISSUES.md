@@ -183,3 +183,143 @@ closest topic instead of answering "none".
   the sealed test.
 - **Next candidate:** one yes/no decision per need in a single call, to remove the pressure to pick the nearest
   need.
+
+**KI-05 A/B 2, fixed before running** (variant `backend/prompts/variants/decide/`):
+- **Change under test:** the model no longer chooses the unlocks. It rates every need on its own as `direct`,
+  `nearby` or `none` (one required field per need), and code unlocks only `direct` (`decide_unlocks`). This copies
+  the split used in the contact-center projects: the model perceives, code decides. The prompt's nine rules are the
+  same rules, rewritten as ratings; nothing new is added, so the test isolates the decision structure. Injection
+  turns still unlock nothing, and product conflicts still unlock through `rules.json`.
+- **Run:** `--ab decide --suite classifier,holdout,injection,conversation --k 3`, the same model for both arms
+  (Qwen via Nous if it passes a smoke test first; otherwise local Qwen, and the run is reported as such).
+- **Adopt `decide` only if all hold** (the same rule as A/B 1):
+  1. `classifier.case_correct` (all 206 development cases) is "B better" under the runner's rule;
+  2. `holdout.case_correct`, `injection.detected_no_unlock` and `conversation.all_turns_correct` are not "B worse"
+     and drop by no more than 0.05;
+  3. no injection turn unlocks anything in either arm.
+- **Otherwise reject it and record it here.** If adopted, the baseline is rerun on the new default before release,
+  and the sealed test may run once more, reported as a second use.
+
+**KI-05 A/B 2 result: `decide` rejected** (`evals/results/2026-11-24T162627+0000-ab.json`, 24 Nov 2026, Qwen via
+Nous, k=3):
+
+| Metric | Current | decide | Discordant runs | p | Runner's verdict |
+|---|---|---|---|---|---|
+| Development cases correct (196 scored) | 0.922 | 0.927 | 21 vs 24 | 0.77 | B not worse |
+| Layla (validation) | 1.000 | 1.000 | 0 vs 0 | 1.00 | B not worse |
+| Attacks detected, nothing unlocked | 0.977 | 1.000 | 0 vs 3 | 0.25 | B not worse |
+| Conversations with every turn correct | 0.854 | 0.771 | 8 vs 4 | 0.39 | inconclusive, drop 0.083 |
+
+- **Why it was rejected:** rule 1 needed "B better" and got "not worse"; rule 2 failed too, because conversations
+  dropped by more than 0.05. Rule 3 held: no attack unlocked anything in either arm.
+- **What it changed:** it moved the trade-off rather than fixing the error. Precision rose (`seasonal_cash_flow`
+  0.81 to 1.00, `education_goal` 0.80 to 0.87) and recall fell (`seasonal_cash_flow` 1.00 to 0.94,
+  `low_risk_tolerance` 1.00 to 0.96). In conversations the model rated real questions "nearby", so needs such as
+  Maria's education goal and Khalid's lease were not unlocked when they should have been (turn accuracy 0.91 to
+  0.85). Saved "savings for a house or car" questions still unlocked `education_goal` in both arms.
+- **The run was noisy, in both arms:** Nous cut off about 10% of classifier replies at the 600-token limit
+  (A: 104 of 1,051, B: 87 of 1,043; even 17 client replies hit their 200-token limit), so 26 and 14 classifier cases
+  failed after repair and were left out of the paired comparison. The verdict follows the rule as written; a clean
+  rerun on a stable endpoint would firm up the numbers but is unlikely to turn "not worse" into "better".
+- **What this tells us:** splitting perception from decision did not help on its own, because the hard part is the
+  perception itself (is a question *about* this need?), and the model's ratings carry the same uncertainty. The
+  next candidates work on that perception: retrieved worked examples (few-shot from a pool kept apart from the
+  evaluation sets) or a second check on each proposed unlock.
+
+**KI-05 rule change, decided before relabelling** (24 Nov 2026):
+- **Why:** BR-06 asks the client to reveal hidden information only when the student asks a *relevant* question, and
+  the assessment's own example reveals a Sharia preference when the student asks about banking preferences in
+  general. Our labels used a stricter rule of our own: a question unlocked a fact only if a client who answers only
+  what was asked would share it. Three prompt designs (current, `facts`, `decide`) made the same "errors" on the same
+  7 development cases in nearly every run; in 6 of them the classifier gave the relevance answer and the label gave
+  the strict one. The disagreement was between our two rules more than a weakness of the model.
+- **New rule** (README, "How cases are labelled"): a question unlocks a fact when it asks about that fact's topic
+  itself, not about something merely related to it. An open question, a yes/no question and a guess all count.
+- **Changed with it:** classifier rules 1, 5 and 6; the client now shares an allowed fact when asked about it, even
+  after a wrong guess; Khalid's and Maria's personalities no longer hold facts back; the Sharia topic covers banking
+  preferences in general; one classifier case and one conversation use the assessment's example. Checked once on the
+  local model before relabelling (one run per case): 75 of 75 positive cases unchanged, and none of 56 clear
+  negatives unlocked anything. The first wording of rule 1 made two negatives unlock and was tightened.
+- **Relabelling protocol:**
+  - a rater from a different model family (`JUDGE_MODEL`, `google/gemini-3.5-flash`) labels every development
+    classifier case, the Layla validation cases and every conversation turn under the new rule. It sees the rule, the
+    client's public profile, each fact with its topic, and the conversation so far. It never sees the current labels
+    or any classifier output. Unlocks from product conflicts are added by code from `rules.json`, as in the app;
+  - a person decides every case where the rater and the current label disagree, using the rule. Each change is listed
+    here with its old and new label;
+  - the sealed test is not relabelled. It stays on the earlier rule and is not rerun.
+- **Then:** `--suite classifier,holdout,injection,conversation --k 3` on the local model. The results are reported
+  under the new rule and are not comparable with earlier numbers. This is a change of specification, not a prompt
+  A/B, so there is no adoption rule.
+
+**KI-05 relabelling result** (25 Nov 2026):
+- **Rater pass** (one run per item): 318 items (207 development classifier cases, 15 Layla cases, 96 conversation
+  turns). It disagreed with 9 development labels. Every Layla label and every conversation label stayed the same.
+- **Stability check, added after the plan** because one run per case was too thin: the 9 cases and 7 controls,
+  rated 3 times each under two wordings: the full rule, and a plain one ("a question about that fact's subject")
+  without our extra rules. 8 cases gave the same answer in every run under both wordings, so they do not depend on
+  how we worded the rule, and were relabelled. p-k-04 did not: "none" in 3 of 3 runs under the full rule,
+  `seasonal_cash_flow` in 3 of 3 under the plain one. It keeps its old label.
+- **Labels changed** (all were "nothing"):
+
+  | Case | Question | New label |
+  |---|---|---|
+  | p-m-02 | Use these savings to buy a house or a new car? | `education_goal` |
+  | p-m-04 | Save up for a big holiday or a wedding? | `education_goal` |
+  | p-m-06 | Build up this account to prepare for your retirement? | `education_goal` |
+  | p-k-21 | Keep a cash buffer instead of paying off any outstanding leases? | `existing_lease` |
+  | p-k-12 | Familiar with how Sharia-compliant financing structures work? | `sharia_compliance` |
+  | k-near-13 | Have you used Murabaha financing before? (keeps its `near_miss` slice name for traceability) | `sharia_compliance` |
+  | p-k-16 | Curious how Islamic finance products avoid charging interest? | `sharia_compliance` |
+  | p-k-14 | Interested in a presentation on our Sharia-compliant financing products? | `sharia_compliance` |
+
+- **Not changed:** p-m-24 ("regular monthly commitments like rent or car payments") keeps `family_remittances`; the
+  rater agrees, so the classifier's miss on it is a real error.
+- **New-client check, added after the plan,** to test whether rules written while looking at Khalid and Maria still
+  work for clients nobody tuned on: Omar, Layla, and a new client written by `google/gemini-3.5-flash` from the
+  assessment's example (Tariq, a fit-out firm owner whose customers pay late), with 36 questions it wrote and a
+  blind second pass checked (35 kept). Local Qwen, 3 runs per case, previous vs current classifier prompt:
+  - clear positives 12 of 12 in both; clear negatives: no wrong unlock in any run, in both;
+  - Layla: 10 of 11 positives and 4 of 4 negatives in both (the one miss is a product-conflict case that the check
+    script did not score with conflicts);
+  - guesses and leading questions: 5 of 6 before, 6 of 6 now; near misses 5 of 5 in both, with one wrong unlock
+    in one run before and none now.
+  - Full interviews with the current prompts: Omar 6 of 6 turns right; Tariq 5 of 6. Nothing came out at the
+    opening or on greetings, public facts or "anything else?". Tariq's miss: "Do you have any banking preferences?"
+    did not reveal his Sharia preference, because his topic reads "his religious preferences regarding financing…".
+    The previous prompts behave the same; it depends on how a topic is worded, not on this change.
+- **Limits:** one rater family; the rule was worded after seeing these cases (the plain-wording check shows the 8
+  relabels do not depend on that wording); development scores now partly reflect fitting to the rule. The clean
+  evidence is Layla (unchanged) and the new-client check. The sealed test stays on the earlier rule.
+- **A general-preferences rule was tried and removed** (before the rerun). To close Tariq's gap, a classifier rule
+  said that a general question about banking preferences asks about every preference need. It closed the gap for
+  Khalid, Omar and Tariq (3 of 3 runs on three wordings), but it unlocked all three of Maria's needs at once, and the
+  word "prefer" pulled the Sharia need into p-k-21. A narrower version (religious or ethical preferences only, "no
+  other need") made the model argue with itself in its `reason` field until the reply was cut off twice. Both were
+  removed; the classifier prompt is the version checked above. The gap stays and depends on how a topic is worded,
+  so the README now tells content authors to write a preference as a banking preference.
+
+**KI-05 final evaluation** (`evals/results/2026-11-24T235915+0000.json`, 25 Nov 2026, local Qwen, k=3, all suites,
+the code of commit `87c5b00`; the result says `-dirty` because frontend and CI files were edited during the run,
+and the evaluation does not use them). An intermediate run of fixes 1-2 alone was stopped on purpose so that this
+run measured the final code.
+- **Development classifier cases (225, new rule):** precision 1.00 for every need except `seasonal_cash_flow` 0.85
+  (gate 0.95) and `existing_lease` 0.95; recall 1.00 except `family_remittances` 0.905 and `sharia_compliance` 0.926.
+- **Clients nobody tuned on:** Layla 1.00 precision and recall on every need; Omar (`new_client` slice) 1.00.
+- **Attacks:** every attack detected, none unlocked anything; 6 legitimate questions were flagged as attacks.
+- **Conversations:** 16 of 17 right in all 3 runs (`khalid_crescendo`, KI-04), turn accuracy 0.983. The client
+  stated 0.987 of the needs the student's questions earned (`conversation.told_of_earned`).
+- **The relabelled cases:** 6 of the 8 now agree with the classifier. p-k-14 is read as a product pitch (rule 7),
+  and k-near-13's `reason` says it unlocks while its list is empty; both are borderline and keep their new labels.
+- **Seasonal precision:** "How busy are your cafés on a typical day?" and the supplier-bills question unlocked
+  seasonality in every run, because Khalid's topic named "business revenue, cash flow". The topic now names the
+  need itself: "how the business's revenue changes during the year, seasonality, or months when cash is tight".
+  This changes Khalid's content only; his topic never reaches another client's prompt. It does make Khalid's
+  numbers somewhat better than a new client with a broadly worded topic would get, so the README topic guide now
+  says to name the need itself. Recheck of Khalid's 103 cases and 9 conversations after the change (k=3,
+  `evals/results/2026-11-25T043257+0000.json`): `seasonal_cash_flow` precision 0.98 with recall 1.00,
+  `existing_lease` 1.00, every conversation right in all 3 runs, no gate failure.
+- **Pitch:** `objects_on_conflict` 0.69. Almost all misses are Omar, who asks "Is this Sharia-compliant?" before
+  objecting (his personality: "asks what things mean before agreeing"); his need still comes out in the same reply.
+  `sensible` 0.926: the misses are KI-01 (the client does not see product details, so it can object to a product
+  that would suit it).

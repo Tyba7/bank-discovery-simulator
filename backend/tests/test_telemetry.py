@@ -94,7 +94,9 @@ LEASE_FACT = "QAR 180,000"  # in Khalid's locked existing_lease fact
 
 def run_turn(log_file, monkeypatch, content: str | None):
     monkeypatch.setenv("LLM_CALL_LOG", str(log_file))
-    if content is not None:
+    if content is None:
+        monkeypatch.delenv("LLM_CALL_LOG_CONTENT", raising=False)  # a developer's .env may turn it on
+    else:
         monkeypatch.setenv("LLM_CALL_LOG_CONTENT", content)
     llm = LLM(SETTINGS)
     graph = build_interview_graph(load_content(), {"classifier": llm, "client": llm, "guard": llm})

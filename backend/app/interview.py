@@ -66,7 +66,10 @@ class Turn(TypedDict):
 class InterviewState(TypedDict, total=False):
     client_id: str
     transcript: Annotated[list[Turn], operator.add]
-    unlocked: list[str]
+    unlocked: list[str]  # needs the student's questions earned: the client may share them. Saved when a reply is shown
+    told: list[str]  # needs the client actually stated in a shown reply (guard evidence); the coach credits only these
+    pending: list[str]  # needs this turn's question earned: the draft may share them, saved in finish on success
+    revealed: list[str]  # allowed needs the last checked draft states; saved into told when that draft is shown
     events: Annotated[list[dict], operator.add]  # failure-registry codes with turn numbers
     trace: Annotated[list[dict], operator.add]  # one entry per node run: timing, outputs, prompt version
     student_message: str  # raw input for this turn
@@ -91,11 +94,21 @@ def list_of(ids: list[str]):
     return list[one_of(ids)]  # pyright: ignore[reportInvalidTypeForm]
 
 
-def classification_model(client: Client, product_ids: list[str]) -> type[BaseModel]:
+DIRECTNESS = Literal["direct", "nearby", "none"]
+
+
+def classification_model(client: Client, product_ids: list[str], decide: bool = False) -> type[BaseModel]:
+    """decide (KI-05 experiment): instead of choosing the unlocks itself, the model rates how directly the message
+    asks about each need, one fixed field per need, and code unlocks only the "direct" ones (decide_unlocks)."""
+    if decide:
+        asks_about = create_model("AsksAbout", **{n.id: (DIRECTNESS, ...) for n in client.hidden_needs})
+        perception = {"asks_about": (asks_about, ...)}
+    else:
+        perception = {"unlocks": (list_of([n.id for n in client.hidden_needs]), ...)}
     return create_model(
         "Classification",
         reason=(str, ...),
-        unlocks=(list_of([n.id for n in client.hidden_needs]), ...),
+        **perception,
         products_proposed=(list_of(product_ids), ...),
         on_topic=(bool, ...),
         injection_attempt=(bool, ...),
@@ -150,13 +163,27 @@ def model_history(transcript: list[Turn], exchanges: int = HISTORY_EXCHANGES) ->
     return [{"role": t["role"], "content": model_text(t)} for t in window]
 
 
+def decide_unlocks(asks_about: dict[str, str]) -> list[str]:
+    """The decision, in code: a need unlocks only when the message asks about it directly."""
+    return sorted(need for need, directness in asks_about.items() if directness == "direct")
+
+
 def classify_message(
-    content: Content, llm: LLM, prompt: Prompt, client: Client, transcript, message: str, show_facts: bool = False
+    content: Content,
+    llm: LLM,
+    prompt: Prompt,
+    client: Client,
+    transcript,
+    message: str,
+    show_facts: bool = False,
+    decide: bool = False,
 ) -> dict:
     """One classifier call. Shared by the graph and the eval runner so evals test the production path.
 
     show_facts (KI-05 experiment): list each need's fact next to its topic. Facts reach the classifier prompt only,
-    never the client prompt or the browser; the classifier outputs ids and a server-side reason."""
+    never the client prompt or the browser; the classifier outputs ids and a server-side reason.
+    decide (KI-05 experiment): the model rates each need; decide_unlocks turns that into the same "unlocks" list, so
+    everything downstream is unchanged."""
     products = "\n".join(f"- {p.id}: {p.name} [{', '.join(p.tags)}]" for p in content.products.values())
     needs = "\n".join(
         f"- {n.id}: {n.topic}" + (f". Fact the client would share: {n.fact}" if show_facts else "")
@@ -169,18 +196,20 @@ def classify_message(
     user = (
         f"<conversation>\n{history or '(start of interview)'}\n</conversation>\n<message>\n{fence(message)}\n</message>"
     )
-    schema = classification_model(client, list(content.products))
+    schema = classification_model(client, list(content.products), decide)
     with llm_scope(role="classifier", prompt=prompt.version):
         result = llm.chat_json(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             schema,
             max_tokens=JSON_MAX_TOKENS,
-        )
-    return result.model_dump()
+        ).model_dump()
+    if decide:
+        result["unlocks"] = decide_unlocks(result["asks_about"])
+    return result
 
 
 def needs_unlocked_by(content: Content, client: Client, classification: dict) -> set[str]:
-    if classification["injection_attempt"]:  # an injection turn unlocks nothing
+    if classification["injection_attempt"] or not classification["on_topic"]:  # these turns unlock nothing
         return set()
     proposed = (conflicts(content, client, content.products[p]) for p in classification["products_proposed"])
     return set(classification["unlocks"]).union(*proposed)
@@ -274,6 +303,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         return {
             "transcript": [{"role": "client", "content": reply}],
             "unlocked": [],
+            "told": [],
             "events": [],
             "_detail": {"prompt": client_prompt.version},
         }
@@ -284,12 +314,16 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "message": message,
             "input_flag": flag,
             "reply_flag": None,
+            "pending": [],
+            "revealed": [],
             "problems": [],
             "attempts": 0,
             "_detail": {"flag": flag},
         }
+        # Every turn writes its own classification: a turn the classifier never sees (empty, too long, blocked) must
+        # not leave the previous turn's labels in state for a later step to read.
+        update["classification"] = {**FAIL_CLOSED, "reason": "input check", "injection_attempt": flag == "injection"}
         if flag == "injection":
-            update["classification"] = {**FAIL_CLOSED, "reason": "input check", "injection_attempt": True}
             update["events"] = [event(state, "SEC-001", "input check")]
         elif flag == "too_long":
             update["events"] = [event(state, "SEC-002", f"{len(message)} characters")]
@@ -306,11 +340,12 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 state["transcript"],
                 state["message"],
                 show_facts=bool(options.get("classifier_facts")),
+                decide=bool(options.get("classifier_decide")),
             )
-        except Exception as e:  # fail closed: a broken classifier never unlocks anything
+        except Exception as e:  # fail closed: nothing unlocks, and the student is asked to rephrase (no silent "no")
             log.exception("classifier failed")
             return {
-                "classification": FAIL_CLOSED,
+                "classification": {**FAIL_CLOSED, "failed": True},
                 "events": [event(state, "CLS-001", type(e).__name__)],
                 "_detail": {"error": type(e).__name__},
             }
@@ -323,8 +358,12 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
 
     def update_unlocked(state):
         new = needs_unlocked_by(content, content.clients[state["client_id"]], state["classification"])
-        added = sorted(new - set(state["unlocked"]))
-        return {"unlocked": sorted(set(state["unlocked"]) | new), "_detail": {"added": added}}
+        pending = sorted(new - set(state["unlocked"]))
+        return {"pending": pending, "_detail": {"pending": pending}}
+
+    def allowed(state) -> set[str]:
+        """What this turn's reply may share: needs already told, plus the ones this question earned."""
+        return set(state["unlocked"]) | set(state.get("pending", []))
 
     def client_reply(state):
         client, c = content.clients[state["client_id"]], state["classification"]
@@ -336,7 +375,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 f"\nYour previous draft was rejected because {'; '.join(state['problems'])}. "
                 "Write a new reply that fixes this."
             )
-        system = client_system_prompt(client_prompt, client, set(state["unlocked"]), note)
+        system = client_system_prompt(client_prompt, client, allowed(state), note)
         history = model_history(state["transcript"])
         messages = [{"role": "system", "content": system}]
         if history and history[0]["role"] == "client":  # the opening is still in the window; it answered the greeting
@@ -370,7 +409,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
                 llms["guard"],
                 guard_prompt,
                 client,
-                set(state["unlocked"]),
+                allowed(state),
                 student_words,
                 question,
                 state["draft"],
@@ -380,6 +419,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             return {
                 "problems": ["the check could not run"],
                 "attempts": MAX_REPLY_ATTEMPTS,
+                "revealed": [],
                 "events": [event(state, "GRD-001", type(e).__name__)],
                 "_detail": {"error": type(e).__name__},
             }
@@ -393,8 +433,11 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         if verdict.invented_fact or new_number:
             problems.append("it stated a fact or amount that is not in your profile")
             events.append(event(state, "CLI-003", verdict.reason if verdict.invented_fact else "number"))
+        # What this draft actually tells the student: an earned need counts as found only once the client says it.
+        revealed = sorted(set(verdict.revealed_need_ids) & allowed(state))
         detail = {
             "prompt": guard_prompt.version,
+            "revealed": revealed,
             "leaked": leaked,
             "number_leak": number_leak,
             "new_number": new_number,
@@ -402,7 +445,7 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "invented_fact": verdict.invented_fact,
             "reason": verdict.reason,
         }
-        return {"problems": problems, "events": events, "_detail": detail}
+        return {"problems": problems, "events": events, "revealed": revealed, "_detail": detail}
 
     def after_guard(state):
         if not state["problems"]:
@@ -410,8 +453,15 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         return "client_reply" if state["attempts"] < MAX_REPLY_ATTEMPTS else "fallback"
 
     def fallback(state):
-        reason = state["input_flag"] if state["input_flag"] in FALLBACK else "guard"
-        return {"draft": FALLBACK[reason], "reply_flag": "fallback", "_detail": {"reason": reason}}
+        if state["input_flag"] in FALLBACK:
+            reason = state["input_flag"]
+        else:  # the classifier or the guard could not decide: same polite request to rephrase
+            reason = "classifier" if state["classification"].get("failed") else "guard"
+        return {
+            "draft": FALLBACK.get(reason, FALLBACK["guard"]),
+            "reply_flag": "fallback",
+            "_detail": {"reason": reason},
+        }
 
     def finish(state):
         injected = state.get("classification", {}).get("injection_attempt") and not state.get("input_flag")
@@ -422,7 +472,18 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
             "content": state["draft"],
             **({"flag": "fallback"} if state.get("reply_flag") else {}),
         }
-        return {"transcript": [student, client]}
+        pending = state.get("pending", [])
+        if state.get("reply_flag"):  # the student was asked to rephrase, so nothing was told: the unlock is not kept
+            return {"transcript": [student, client], "pending": [], "_detail": {"added": [], "discarded": pending}}
+        unlocked = sorted(set(state["unlocked"]) | set(pending))
+        told_now = sorted(set(state.get("revealed", [])) - set(state.get("told", [])))
+        return {
+            "transcript": [student, client],
+            "unlocked": unlocked,
+            "told": sorted(set(state.get("told", [])) | set(told_now)),
+            "pending": [],
+            "_detail": {"added": pending, "told": told_now},
+        }
 
     graph = StateGraph(InterviewState)
     nodes = {
@@ -448,7 +509,11 @@ def build_interview_graph(content: Content, llms: Mapping[str, LLM], checkpointe
         ),
         ["fallback", "update_unlocked", "classify"],
     )
-    graph.add_edge("classify", "update_unlocked")
+    graph.add_conditional_edges(
+        "classify",
+        lambda s: "fallback" if s["classification"].get("failed") else "update_unlocked",
+        ["fallback", "update_unlocked"],
+    )
     graph.add_edge("update_unlocked", "client_reply")
     graph.add_edge("client_reply", "guard")
     graph.add_conditional_edges("guard", after_guard, ["finish", "client_reply", "fallback"])

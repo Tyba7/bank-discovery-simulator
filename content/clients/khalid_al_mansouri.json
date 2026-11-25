@@ -3,23 +3,23 @@
   "name": "Khalid Al-Mansouri",
   "age": 42,
   "occupation": "Owner of two cafés in Doha",
-  "background": "Qatari business owner. Opened his first café eight years ago and a second three years ago. Married with three children.",
+  "background": "Qatari business owner. Opened his first café eight years ago and a second three years ago. Married with three children. The two cafés are profitable and together take about QAR 3.2 million a year. He expects the third café to need about QAR 650,000 for fit-out and equipment.",
   "stated_goal": "Wants to talk about financing to open a third café.",
-  "personality": "Friendly and confident but busy. Gives short answers and goes into detail only when asked a direct, specific question. Proud of his business and reluctant to admit problems.",
+  "personality": "Friendly and confident but busy. Gives short answers. Proud of his business, so he plays problems down a little, but answers honestly when asked about them.",
   "tags": ["business_owner"],
   "hidden_needs": [
     {
       "id": "sharia_compliance",
       "category": "preferences",
       "tags": ["requires_sharia"],
-      "topic": "religious or ethical preferences about banking, interest, or Islamic / Sharia-compliant products",
+      "topic": "banking preferences, especially religious or ethical ones about interest or Islamic / Sharia-compliant products",
       "fact": "He will only use Sharia-compliant products and refuses anything that charges interest."
     },
     {
       "id": "seasonal_cash_flow",
       "category": "financial_situation",
       "tags": ["seasonal_revenue"],
-      "topic": "business revenue, cash flow, seasonality, or how income changes during the year",
+      "topic": "how the business's revenue changes during the year, seasonality, or months when cash is tight",
       "fact": "Revenue drops about 40% from June to August when many residents travel. Last summer he paid two suppliers late."
     },
     {

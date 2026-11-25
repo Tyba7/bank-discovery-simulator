@@ -87,6 +87,13 @@ def rows(path: Path, **defaults) -> list[dict]:
     return [{**defaults, **json.loads(line)} for line in path.read_text().splitlines() if line.strip()]
 
 
+PROVIDER_FAILURES = {"CLS-001", "GRD-001"}  # the classifier or guard call failed: the app fell back, nothing decided
+
+
+class ProviderFailure(RuntimeError):
+    """A conversation run in which a model call failed; recorded as an error, not as a wrong decision."""
+
+
 def ratio(a: int, b: int) -> float:
     return round(a / b, 3) if b else 1.0
 
@@ -132,11 +139,13 @@ class Runner:
 
     def safe(self, suite, fn, item):
         """One failed call is recorded and skipped; it never ends the whole run."""
+        name = (item.get("id") or item.get("question", "?")[:60]) if isinstance(item, dict) else str(item)
         try:
-            return fn(item)
+            # every model call in the call log says which case and which A/B arm it belongs to
+            with llm_scope(case=name, arm=self.variant or "default"):
+                return fn(item)
         except Exception as e:  # noqa: BLE001 -- any failure is recorded per case; the run goes on
             self.errors[suite] += 1
-            name = (item.get("id") or item.get("question", "?")[:60]) if isinstance(item, dict) else str(item)
             self.fail(suite, name, f"error: {type(e).__name__}: {str(e)[:120]}")
             return None
 
@@ -181,6 +190,7 @@ class Runner:
                     case.get("history", []),
                     message,
                     show_facts=bool(variant_options(self.variant).get("classifier_facts")),
+                    decide=bool(variant_options(self.variant).get("classifier_decide")),
                 ),
             )
         return {**result, "input_flag": flag, "unlocked": sorted(needs_unlocked_by(self.content, client, result))}
@@ -243,14 +253,21 @@ class Runner:
     def suite_injection(self):
         results = self.repeat("injection", self.classify_case, rows(EVALS / "injection_cases.jsonl"))
         detected = unlocked = by_input_check = n = 0
+        # Per attack category, because an average hides the kind of attack that gets through (two to five cases each,
+        # so one miss moves a category a lot: read these as where to look, not as precise rates). Not gated.
+        category_runs: Counter = Counter()
+        category_caught: Counter = Counter()
         for case, runs in results:
             self.note_flaky("injection", case, runs, lambda r: (r["injection_attempt"], tuple(r["unlocked"])))
             for r in runs:
-                self.outcome("injection.detected_no_unlock", case["id"], r["injection_attempt"] and not r["unlocked"])
+                caught = r["injection_attempt"] and not r["unlocked"]
+                self.outcome("injection.detected_no_unlock", case["id"], caught)
                 n += 1
                 detected += r["injection_attempt"]
                 unlocked += bool(r["unlocked"])
                 by_input_check += r["input_flag"] == "injection"
+                category_runs[case["attack"]] += 1
+                category_caught[case["attack"]] += caught
                 if not r["injection_attempt"] or r["unlocked"]:
                     self.fail("injection", case["id"], f"flag={r['injection_attempt']} unlocked={r['unlocked']}")
         self.metrics.update(
@@ -258,6 +275,10 @@ class Runner:
                 "injection.detection": ratio(detected, n),
                 "injection.unlocked": unlocked,
                 "injection.caught_by_input_check": ratio(by_input_check, n),
+                **{
+                    f"injection.by_attack.{attack}": ratio(category_caught[attack], runs)
+                    for attack, runs in sorted(category_runs.items())
+                },
             }
         )
 
@@ -332,8 +353,18 @@ class Runner:
             start = time.perf_counter()
             state = graph.invoke({"student_message": turn["student"]}, config)
             self.latency.setdefault("turn", []).append((time.perf_counter() - start) * 1000)
-            turns.append({"unlocked": state["unlocked"], "reply": state["transcript"][-1]["content"]})
+            turns.append(
+                {
+                    "unlocked": state["unlocked"],
+                    "told": state.get("told", []),
+                    "reply": state["transcript"][-1]["content"],
+                }
+            )
         self.collect(state)
+        # A model call that failed says nothing about the unlock decision: count the run as an error (safe() records
+        # it and leaves it out of the metrics and the A/B pairing) instead of scoring a fail-closed turn as wrong.
+        if failed := sorted({e["code"] for e in state.get("events", [])} & PROVIDER_FAILURES):
+            raise ProviderFailure(f"{', '.join(failed)} during the conversation")
         return turns
 
     def suite_conversation(self):
@@ -382,6 +413,12 @@ class Runner:
         self.metrics["conversation.guard_rejection_rate"] = ratio(rejected, drafts)
         self.metrics["conversation.fallback_rate"] = ratio(fallbacks, sum(len(c["turns"]) for c in cases) * self.k)
         self.metrics["conversation.turn_accuracy"] = ratio(turns_ok, turns_n)
+        # Of the needs the student's questions earned, how many the client actually stated (the coach credits only
+        # those). Not gated: it measures the client's sharing, not the unlock decision.
+        ends = [r[-1] for _, runs in results for r in runs if r]
+        self.metrics["conversation.told_of_earned"] = ratio(
+            sum(len(set(e["told"]) & set(e["unlocked"])) for e in ends), sum(len(e["unlocked"]) for e in ends)
+        )
         if echo_n:
             self.metrics["conversation.no_echo"] = ratio(echo_ok, echo_n)
 
@@ -548,13 +585,15 @@ class Runner:
                     "products_proposed": turn.get("proposed", []),
                 }
             )
-            trace.append({"turn": i, "node": "update_unlocked", "added": turn.get("added", [])})
+            # the case's client replies state what they unlock, so earned and told are the same here
+            trace.append({"turn": i, "node": "finish", "added": turn.get("added", []), "told": turn.get("added", [])})
             unlocked += turn.get("added", [])
         return {
             "client_id": case["client"],
             "transcript": transcript,
             "trace": trace,
             "unlocked": unlocked,
+            "told": unlocked,
             "events": [],
         }
 
@@ -833,7 +872,18 @@ def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline:
         "regressions": regressions(dev, baseline),
         "flaky": sorted(set(runner.flaky)),
         "failures": runner.failures,
+        "call_log": os.environ.get("LLM_CALL_LOG"),  # every prompt and raw output of this run, for show_trace
     }
+
+
+def use_call_log(ab: bool) -> Path:
+    """Each eval run writes its own call log with full prompts and raw outputs, so any failed case can be read back
+    exactly (scripts/show_trace.py). It stays in the git-ignored logs/ folder; the app's own LLM_CALL_LOG is not used."""
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S")
+    path = EVALS.parent / "logs" / f"eval-{stamp}{'-ab' if ab else ''}.jsonl"
+    os.environ["LLM_CALL_LOG"] = str(path)
+    os.environ["LLM_CALL_LOG_CONTENT"] = "1"
+    return path
 
 
 def save(result: dict) -> Path:
@@ -929,6 +979,8 @@ def main() -> int:
     if unknown := set(suites) - set(SUITES + SEALED):
         parser.error(f"unknown suite {sorted(unknown)}")
     logging.basicConfig(level=logging.WARNING)
+    call_log = use_call_log(bool(args.ab))
+    print(f"call log: {call_log.relative_to(EVALS.parent)}  (read it with: python -m scripts.show_trace <path>)")
     if args.ab:
         if args.write_baseline:
             parser.error("--write-baseline cannot be combined with --ab")

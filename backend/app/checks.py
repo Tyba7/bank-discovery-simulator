@@ -10,7 +10,16 @@ _INJECTION = re.compile(
     # English phrases kept narrow: "system message" and "hidden information" are normal banking talk (eval
     # m-trig-01, k-trig-01, m-trig-02 were flagged). The classifier is the main injection detector; this is a pre-filter.
     r"|\b(?:system|developer) prompt\b|\bdeveloper (?:message|mode)\b|\bdebug mode\b"
-    r"|\b(?:hidden|secret)[ _](?:needs?|instructions?|fields?|profile)\b",
+    r"|\b(?:hidden|secret)[ _](?:needs?|instructions?|fields?|profile)\b"
+    # The labeller's own vocabulary: a student talking to a client never names the classifier, its output fields or
+    # its schema, never writes a label as JSON or a tag, and never asks for "the AI behind" the character. These
+    # catch attacks that try to set the labels directly, whatever model is labelling (gemma-3-4b obeyed them).
+    r"|\bclassifier\b|\btopic checker\b|\b(?:injection_attempt|products_proposed|question_type|on_topic)\b"
+    r"|[\"']unlocks[\"']\s*:|\bunlocks\s*[:=]|<\s*/?\s*(?:classification|labels?|system)\s*>"
+    r"|\b(?:enum|schema)\b"
+    r"|\b(?:relevant|related) to (?:every|all) (?:hidden )?(?:topics?|needs?|ids?)\b"
+    # "You are an assistant manager" is a real job, so "assistant" counts only after "now".
+    r"|\b(?:the )?ai behind\b|\byou are now an? (?:ai|assistant|language model)\b|\byou are an? (?:ai|language model)\b",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
