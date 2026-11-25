@@ -143,9 +143,6 @@ Tested on macOS; Windows uses the same steps but has not been tested yet.
 
    <img src="docs/images/5-feedback-improve.jpg" width="620" alt="Feedback, lower: What was missed with a tested question to ask and the unsuitable product proposed at turn 4, then How to improve">
 
-`start.py` was tested in a fresh copy of the project on macOS (setup, settings and start); it uses only Python's
-standard library and the same `npm` and `uv` commands on every system, but was not run on a Windows machine.
-
 **For developers:**
 - `OPENAI_API_KEY` and `OPENAI_MODEL` skip the questions; delete `backend/.env` to enter new ones. For another
   provider or a local model, follow [Quick start](#quick-start).
@@ -161,7 +158,7 @@ standard library and the same `npm` and `uv` commands on every system, but was n
 
 ## Quick start
 
-**You need:** Python 3.13 with [uv](https://docs.astral.sh/uv/), Node.js 22 or 24 (LTS), and an OpenAI-compatible model
+**You need:** Python 3.13 with [uv](https://docs.astral.sh/uv/), Node.js 22 or newer, and an OpenAI-compatible model
 endpoint: a hosted API key, or a local server such as llama.cpp, Ollama or LM Studio. The tested local model
 (Qwen3.6-35B-A3B, Q4_K_M) is a 21 GB file and needs a machine with about 32 GB of memory; give llama.cpp at least
 16k tokens of context per parallel slot so the coach can read a long interview.
@@ -270,7 +267,8 @@ schema in the prompt, so it also works with servers that have no structured-outp
 
 The final code was evaluated on the local model (25 Nov 2026, k = 3 runs per case, all suites, labelled with the
 rule in [How cases are labelled](#how-cases-are-labelled)). The hosted models were evaluated on 23 Nov, on earlier
-code and with the earlier, stricter labels, so their columns are not directly comparable with the first one.
+code and with the earlier, stricter labels, so their columns are not directly comparable with the first one. The
+coach was rechecked after its 25 Nov changes (coach suite, on local Qwen and on `gpt-4.1-mini`).
 
 | | Qwen3.6-35B-A3B, local (llama.cpp, Q4_K_M): final code, 25 Nov | Qwen3.6-35B-A3B, hosted (Nous Portal): 23 Nov | Claude Haiku 5.5 (Nous Portal): 23 Nov |
 |---|---|---|---|
@@ -473,8 +471,8 @@ The AI behaviour is measured with repeatable evaluations ([`backend/evals/`](bac
 | conversation | 17 (96 turns) | multi-turn unlocking through the full graph; guard rejection and fallback rates; how many earned needs the client actually stated | — |
 | opening | 30 | the first message never leaks | 0 leaks |
 | pitch | 36 | every product pitched to every client, before and after its needs are known: sensible reaction (judge), objection when the product conflicts with a shared need | — |
-| relevance | per reply | a different-family judge checks that replies answer the question | — |
-| coach | 7 | missed needs listed, unsuitable products flagged, quotes grounded, summary labels, verdict agreement (judge) | SC-03 gates = 1.0 |
+| relevance | per reply | the judge model (`JUDGE_MODEL`) checks that replies answer the question | — |
+| coach | 7 | missed needs listed, unsuitable products flagged, quotes grounded, pitch mistakes at their turn, product notes start with the shown verdict, first drafts clean, summary labels, verdict agreement (judge) | SC-03 gates = 1.0 |
 
 ```bash
 uv --directory backend run python -m evals.run --suite all --k 3
@@ -484,7 +482,8 @@ uv --directory backend run python -m evals.run --suite all --k 3
 - **Results:** each run is saved to `backend/evals/results/` with the git commit, prompt versions, model and a hash of
   the eval set.
 - **Regressions:** the run is compared with a baseline (`--write-baseline` saves one, but only from a run with no
-  failed calls). The run fails on a gate failure or a drop of more than 0.03.
+  failed calls). The run fails on a gate failure or a drop of more than 0.03. Judged metrics are not gated when the
+  judge is the model under test.
 - **Tracing:** every model call is recorded with its graph node, role, tokens, cost and latency.
 - **`k`** is within-session repeatability, not a robustness estimate.
 - **A/B tests:** `--ab VARIANT` compares the current prompts with `backend/prompts/variants/VARIANT/` on the same cases
@@ -532,7 +531,7 @@ the second café, with 18 months left."
   borrowing. The classifier only sees the topic text ("…loans, leases…"), so this is a deliberately hard case.
 
 Until 24 Nov 2026 the labels used a stricter rule: a question unlocked a fact only if a client who answers only what
-was asked would share it. The development cases are being relabelled under the rule above; see
+was asked would share it. The development cases were relabelled under the rule above on 25 Nov; see
 [KI-05](docs/KNOWN_ISSUES.md#ki-05-the-classifier-unlocks-the-nearest-need-on-adjacent-questions).
 
 The other rules:
@@ -580,7 +579,7 @@ Logged by the server and counted by the evaluation runner.
 |---|---|---|
 | SEC-001 | Injection attempt (input check, classifier or coach submission) | the client declines in character; nothing unlocks |
 | SEC-002 | Message too long | "Could you ask me one thing at a time?" |
-| CLS-001 | Classifier failed | the turn continues; nothing unlocks (fail closed) |
+| CLS-001 | Classifier failed | "Sorry, could you ask me that another way?"; nothing unlocks (fail closed) |
 | CLI-001 / 002 / 003 | Draft leaked a locked fact / broke character / invented a fact | the draft is rewritten once, then a safe fallback |
 | GRD-001 | Guard could not run | safe fallback reply (an unchecked reply is never shown) |
 | LLM-001 / 002 / 003 | JSON mode unsupported (falls back) / reply truncated / invalid JSON (repaired once) | nothing |
@@ -619,7 +618,8 @@ start.py        one-command start (any system): asks for the key and model, then
   finds it stated in a shown reply, and the guard suite scores leak decisions, not that.
 - **The judge is not calibrated:** pitch reactions, reply relevance and coach verdicts are scored by a model
   (`JUDGE_MODEL`; the model under test when unset), not checked against human labels. Reported numbers used
-  `google/gemini-3.5-flash`; with Qwen judging itself the coach verdict gate failed (0.91) on clear judge errors.
+  `google/gemini-3.5-flash`. When the model judges itself, judged scores are reported but not gated: Qwen judging
+  itself scored coach verdict agreement 0.88–0.91, on clear judge errors.
 - **Sessions are in memory:** a restart ends open interviews, and one server process is assumed. Download the session
   to keep it. There is no rate limit across sessions.
 - **Held-out data:** Layla has now been evaluated several times, and Omar's questions were written by a model. The
