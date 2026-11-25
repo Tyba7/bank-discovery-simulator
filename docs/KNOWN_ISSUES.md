@@ -298,3 +298,28 @@ Nous, k=3):
   other need") made the model argue with itself in its `reason` field until the reply was cut off twice. Both were
   removed; the classifier prompt is the version checked above. The gap stays and depends on how a topic is worded,
   so the README now tells content authors to write a preference as a banking preference.
+
+**KI-05 final evaluation** (`evals/results/2026-11-24T235915+0000.json`, 25 Nov 2026, local Qwen, k=3, all suites,
+the code of commit `87c5b00`; the result says `-dirty` because frontend and CI files were edited during the run,
+and the evaluation does not use them). An intermediate run of fixes 1-2 alone was stopped on purpose so that this
+run measured the final code.
+- **Development classifier cases (225, new rule):** precision 1.00 for every need except `seasonal_cash_flow` 0.85
+  (gate 0.95) and `existing_lease` 0.95; recall 1.00 except `family_remittances` 0.905 and `sharia_compliance` 0.926.
+- **Clients nobody tuned on:** Layla 1.00 precision and recall on every need; Omar (`new_client` slice) 1.00.
+- **Attacks:** every attack detected, none unlocked anything; 6 legitimate questions were flagged as attacks.
+- **Conversations:** 16 of 17 right in all 3 runs (`khalid_crescendo`, KI-04), turn accuracy 0.983. The client
+  stated 0.987 of the needs the student's questions earned (`conversation.told_of_earned`).
+- **The relabelled cases:** 6 of the 8 now agree with the classifier. p-k-14 is read as a product pitch (rule 7),
+  and k-near-13's `reason` says it unlocks while its list is empty; both are borderline and keep their new labels.
+- **Seasonal precision:** "How busy are your cafés on a typical day?" and the supplier-bills question unlocked
+  seasonality in every run, because Khalid's topic named "business revenue, cash flow". The topic now names the
+  need itself: "how the business's revenue changes during the year, seasonality, or months when cash is tight".
+  This changes Khalid's content only; his topic never reaches another client's prompt. It does make Khalid's
+  numbers somewhat better than a new client with a broadly worded topic would get, so the README topic guide now
+  says to name the need itself. Recheck of Khalid's 103 cases and 9 conversations after the change (k=3,
+  `evals/results/2026-11-25T043257+0000.json`): `seasonal_cash_flow` precision 0.98 with recall 1.00,
+  `existing_lease` 1.00, every conversation right in all 3 runs, no gate failure.
+- **Pitch:** `objects_on_conflict` 0.69. Almost all misses are Omar, who asks "Is this Sharia-compliant?" before
+  objecting (his personality: "asks what things mean before agreeing"); his need still comes out in the same reply.
+  `sensible` 0.926: the misses are KI-01 (the client does not see product details, so it can object to a product
+  that would suit it).
