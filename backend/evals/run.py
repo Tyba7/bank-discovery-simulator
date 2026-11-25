@@ -625,6 +625,7 @@ class Runner:
                     [fb.summary["feedback"], fb.question_feedback, *fb.next_steps]
                     + [w["point"] for w in fb.went_well]
                     + [m["why_it_matters"] for m in fb.missed_needs]
+                    + [f"{m['why_unsuitable']} {m['better_move']}" for m in fb.pitch_mistakes]
                     + [p["comment"] for p in fb.products]
                 )
                 score += bool(SCORE_LANGUAGE.search(text))

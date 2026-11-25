@@ -369,12 +369,15 @@ every claim.
 
 - **From code:** which needs were uncovered (and by which question) or missed, and each product's verdict from the
   rules engine ([`app/suitability.py`](backend/app/suitability.py), [`content/rules.json`](content/rules.json)).
-- **From the model:** what went well (exact quotes), why each missed need matters with a better question, and an
-  explanation of each product verdict.
+- **From the model:** what went well (exact quotes), why each missed need matters with a better question, each
+  unsuitable product the student proposed (at its turn, with what to do instead), an explanation of each product
+  verdict, and next steps tied to the turns they learn from.
 - **Checked in code:**
   - quotes must be the student's own words at the cited turn;
   - pitching an unsuitable product is never praised;
-  - every missed need and product is covered;
+  - every missed need, product and unsuitable proposal is covered;
+  - each product explanation starts with the verdict the student sees, so it cannot contradict it;
+  - a turn cited in a next step must exist;
   - every suggested question is run through the real classifier and must unlock its need ("Tested" badge).
 - **Redraft:** one, with the problems named. What is still wrong is dropped and filled from the rules.
 - **On screen:** the rules' assessment comes first and the coach's explanation second.
@@ -610,8 +613,9 @@ start.py        one-command start (any system): asks for the key and model, then
   [Editing clients and products](#editing-clients-and-products).
 - **What the guard sees a reply state is not measured on its own:** the coach credits a need only when the guard
   finds it stated in a shown reply, and the guard suite scores leak decisions, not that.
-- **The judge is not calibrated:** pitch reactions and reply relevance are scored by a model from a different
-  family, not checked against human labels.
+- **The judge is not calibrated:** pitch reactions, reply relevance and coach verdicts are scored by a model
+  (`JUDGE_MODEL`; the model under test when unset), not checked against human labels. Reported numbers used
+  `google/gemini-3.5-flash`; with Qwen judging itself the coach verdict gate failed (0.91) on clear judge errors.
 - **Sessions are in memory:** a restart ends open interviews, and one server process is assumed. Download the session
   to keep it. There is no rate limit across sessions.
 - **Held-out data:** Layla has now been evaluated several times, and Omar's questions were written by a model. The
