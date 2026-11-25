@@ -295,9 +295,8 @@ code and with the earlier, stricter labels, so their columns are not directly co
 Click a FastAPI box to open its source code.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph UI["Browser · React"]
-    direction TB
     U1(["Choose client"])
     U2(["Ask a question"])
     U3(["Submit summary"])
@@ -305,7 +304,6 @@ flowchart LR
   end
 
   subgraph API["FastAPI · LangGraph"]
-    direction TB
     S1["POST /api/sessions<br/>opening"]
     S2["POST /api/sessions/{id}/messages<br/>input check → classifier → unlock rules<br/>→ client reply → guard (+1 rewrite)"]
     S3["POST /api/sessions/{id}/feedback<br/>facts from code → coach → checks"]
@@ -313,15 +311,12 @@ flowchart LR
   end
 
   subgraph LLM["Model · any OpenAI-compatible API"]
-    direction TB
     M1["Client persona"]
     M2["Classifier · JSON"]
     M3["Guard · JSON"]
     M4["Coach · JSON"]
   end
 
-  U1 ~~~ U2 ~~~ U3 ~~~ U4
-  S1 ~~~ S2 ~~~ S3 ~~~ S4
   U1 --> S1 --> M1
   U2 --> S2
   S2 --> M2
