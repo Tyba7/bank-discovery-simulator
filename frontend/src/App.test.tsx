@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Feedback as FeedbackData, Session } from "./api";
 import { Feedback } from "./screens/Feedback";
 import { ChatMessage, Interview } from "./screens/Interview";
+import { Submit } from "./screens/Submit";
 
 const ATTACK = `<img src=x onerror="alert('xss')"><script>alert('xss')</script>`;
 
@@ -52,6 +53,33 @@ describe("interview", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The AI service is not responding right now.");
     expect(screen.getByLabelText("Your question")).toHaveValue("What are you saving for?");
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ ...session, messages: session.messages }));
+  });
+
+  it("says it is still working when a reply is slow", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {}))); // the model never answers
+    render(<Interview session={session} products={[]} onChange={vi.fn()} onFinish={vi.fn()} onRestart={vi.fn()} />);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(screen.getByLabelText("Your question"), "Any plans?{Enter}");
+    expect(screen.queryByText(/Still working/)).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(screen.getByText(/Still working/)).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+});
+
+describe("submit", () => {
+  it("asks before ending the interview with an empty summary", async () => {
+    const fetch = respond(200, {});
+    vi.stubGlobal("fetch", fetch);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<Submit session={session} products={[]} onBack={vi.fn()} onFeedback={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Submit for feedback" }));
+    expect(confirm).toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled(); // declined, so nothing was sent
+    confirm.mockRestore();
   });
 });
 

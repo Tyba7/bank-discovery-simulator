@@ -2,6 +2,8 @@ import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 
 import { api, ApiError, MAX_MESSAGE_CHARS, type Message, type ProductCard, type Session } from "../api";
 import { Catalogue } from "./Catalogue";
 
+const SLOW_TURN_MS = 15_000;
+
 interface Props {
   session: Session;
   products: ProductCard[];
@@ -24,6 +26,7 @@ export function Interview({ session, products, onChange, onFinish, onRestart }: 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const firstName = session.client.name.split(" ")[0];
   const studentTurns = session.messages.filter((m) => m.role === "student").length;
@@ -32,6 +35,14 @@ export function Interview({ session, products, onChange, onFinish, onRestart }: 
     // A block body on purpose: newer browsers return a Promise from scrollIntoView, and React must get no cleanup value.
     endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
   }, [session.messages, pending]);
+
+  useEffect(() => {
+    // One turn can take several model calls; on a slow model, say so instead of looking frozen.
+    setSlow(false);
+    if (!pending) return;
+    const timer = setTimeout(() => setSlow(true), SLOW_TURN_MS);
+    return () => clearTimeout(timer);
+  }, [pending]);
 
   const send = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -70,7 +81,7 @@ export function Interview({ session, products, onChange, onFinish, onRestart }: 
             <ChatMessage key={i} message={m} clientName={firstName} />
           ))}
           {pending && (
-            <div className="bubble client typing" aria-label={`${firstName} is replying`}>
+            <div className="bubble client typing" role="status" aria-label={`${firstName} is replying`}>
               <span className="speaker">{firstName}</span>
               <p>
                 <span className="dots" aria-hidden="true">
@@ -80,6 +91,11 @@ export function Interview({ session, products, onChange, onFinish, onRestart }: 
                 </span>
               </p>
             </div>
+          )}
+          {slow && (
+            <p className="muted small" role="status">
+              Still working on a reply. On a slow model this can take up to a minute; your question is safe.
+            </p>
           )}
           <div ref={endRef} />
         </div>
