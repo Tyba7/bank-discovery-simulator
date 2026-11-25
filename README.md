@@ -42,8 +42,8 @@ flowchart TB
 
   subgraph COACH["After the interview: the AI coach"]
     direction LR
-    X["Facts<br/><i>code · needs found,<br/>product rules</i>"] --> Y["Coach<br/><i>model · explains them</i>"]
-    Y --> Z["Checks<br/><i>code + model · real quotes,<br/>tested questions</i>"]
+    X["Facts<br/><i>code + model · needs found,<br/>product rules, needs in the summary</i>"] --> Y["Coach<br/><i>model · explains them</i>"]
+    Y --> Z["Checks<br/><i>code + model · real quotes, tested questions,<br/>verdicts and turns match</i>"]
   end
 
   C --> COACH
@@ -59,9 +59,9 @@ flowchart TB
   classDef both fill:#CFFAFE,stroke:#0891B2,color:#164E63,stroke-width:2px
   classDef data fill:#F3E8FF,stroke:#9333EA,color:#581C87,stroke-width:2px
   class A,B,C,D student
-  class Q,U,X code
+  class Q,U code
   class K,R,Y model
-  class G,Z both
+  class G,X,Z both
   class FILES data
 ```
 
@@ -99,7 +99,7 @@ sequenceDiagram
   end
   Note over W,G: Locked facts never enter the persona's prompt.<br/>A need counts as found only when a shown reply states it.
   S->>W: summary and recommended products
-  W->>K: facts from code: needs found, product rules
+  W->>K: facts: needs found, product rules (code), needs in the summary (model)
   K-->>W: what went well, what was missed, how to improve (checked)
   W-->>S: feedback, and a download of the session
 ```
