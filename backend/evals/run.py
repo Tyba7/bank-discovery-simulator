@@ -512,7 +512,7 @@ class Runner:
             ratio(sum(v.stance == "objects" for _, v in conflict), len(conflict)) if conflict else None
         )
 
-    # --- reply relevance: judged by a model from a different family than the one under test ---
+    # --- reply relevance: judged by the JUDGE_* model (see judge()) ---
 
     def judge(self) -> LLM:
         """The grading model from JUDGE_* settings; without JUDGE_MODEL it is the model under test. A model from
@@ -789,6 +789,25 @@ def llm_usage(calls: list[dict]) -> dict:
     return usage
 
 
+# Scored by the judge model. When it is the model under test they are still reported, but not gated or compared
+# with a baseline judged by another model: a model grading itself misreads its own output (25 Nov, Qwen: 0.88).
+JUDGED = (
+    "coach.verdict_agreement",
+    "coach.summary_scope_violations",
+    "pitch.sensible",
+    "pitch.objects_on_conflict",
+    "relevance.",
+)
+SELF_JUDGED = "(same as under test)"
+
+
+def gated(metrics: dict, judge_model: str | None) -> dict:
+    """The metrics gates and regressions apply to: all, except judged ones when the model judged itself."""
+    if not (judge_model or "").endswith(SELF_JUDGED):
+        return metrics
+    return {k: v for k, v in metrics.items() if not k.startswith(JUDGED)}
+
+
 def gate_failures(metrics: dict) -> list[str]:
     failed = []
     for name, value in metrics.items():
@@ -838,6 +857,7 @@ def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline:
     holdout = {k: v for k, v in metrics.items() if k.startswith("holdout.")}
     sealed = {k: v for k, v in metrics.items() if k.startswith("test.")}
     dev = {k: v for k, v in metrics.items() if k not in holdout and k not in sealed}
+    checked = gated(dev, getattr(runner, "judge_model", None))
     latency = {
         name: {"p50": percentile(v, 50), "p95": percentile(v, 95), "n": len(v)} for name, v in runner.latency.items()
     }
@@ -861,8 +881,9 @@ def summarise(runner: Runner, args, suites: list[str], seconds: float, baseline:
         "failure_codes": dict(runner.events),
         "llm_usage": llm_usage(runner.calls),
         "errors": dict(runner.errors),
-        "gate_failures": gate_failures(dev) + [f"{s}: {n} calls raised errors" for s, n in runner.errors.items()],
-        "regressions": regressions(dev, baseline),
+        "gate_failures": gate_failures(checked) + [f"{s}: {n} calls raised errors" for s, n in runner.errors.items()],
+        "regressions": regressions(checked, baseline),
+        "not_gated": sorted(dev.keys() - checked.keys()),  # self-judged: reported only
         "flaky": sorted(set(runner.flaky)),
         "failures": runner.failures,
         "call_log": os.environ.get("LLM_CALL_LOG"),  # every prompt and raw output of this run, for show_trace
@@ -1017,6 +1038,8 @@ def main() -> int:
     print(f"failures ({len(runner.failures)}):")
     for f in runner.failures:
         print(f"  {f['suite']} | {f['id']} | {f['detail']}")
+    if result["not_gated"]:
+        print(f"\nnot gated (the model judged itself): {', '.join(result['not_gated'])}")
     print(f"\ngate failures: {gates or 'none'}")
     print(f"regressions vs baseline (> {MAX_REGRESSION}): {regressed or 'none' if baseline else 'no baseline yet'}")
     wrote_baseline = args.write_baseline and not runner.errors

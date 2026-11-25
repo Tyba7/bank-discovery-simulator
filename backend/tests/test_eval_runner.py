@@ -1,6 +1,6 @@
 import pytest
 
-from evals.run import ab_verdict, gate_failures, kappa, mcnemar_p, paired, regressions
+from evals.run import ab_verdict, gate_failures, gated, kappa, mcnemar_p, paired, regressions
 
 
 def test_kappa():
@@ -78,3 +78,12 @@ def test_the_sealed_test_set_is_never_part_of_a_default_run():
     from evals.run import SEALED, SUITES
 
     assert "test" in SEALED and "test" not in SUITES
+
+
+def test_a_model_judging_itself_is_reported_but_not_gated():
+    metrics = {"coach.verdict_agreement": 0.88, "relevance.rate": 0.5, "coach.rules_fallback": 1}
+    checked = gated(metrics, "qwen (same as under test)")
+    assert checked == {"coach.rules_fallback": 1}  # code-measured metrics still gate
+    assert gate_failures(checked) == ["coach.rules_fallback = 1 (gate == 0)"]
+    assert regressions(checked, {"coach.verdict_agreement": 0.98}) == []
+    assert gated(metrics, "google/gemini-3.5-flash") == metrics  # a separate judge is gated as before
