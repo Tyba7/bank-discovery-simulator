@@ -125,7 +125,9 @@ export function Feedback({ session, feedback, onRestart }: Props) {
         {feedback.pitch_mistakes.map((m) => (
           <div key={m.product_id} className="missed-need">
             <h3>
-              Turn {m.turn}: you proposed {readable(m.product_id)}
+              Turn {m.turn}: you proposed{" "}
+              {feedback.products.find((p) => p.id === m.product_id)?.name ??
+                readable(m.product_id)}
             </h3>
             <p>{m.why_unsuitable}</p>
             <p className="try">

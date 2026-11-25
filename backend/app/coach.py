@@ -193,7 +193,11 @@ def feedback_model(sheet: FactSheet) -> type[BaseModel]:
         went_well=(Annotated[list[point], Field(max_length=3)], ...),
         missed_needs=(list[missed_need] if missed else none_allowed, ...),
         pitch_mistakes=(list[pitch_mistake] if pitched else none_allowed, ...),
-        product_notes=(list[product_note] if product_ids else none_allowed, ...),
+        # capped: without a bound a local model has looped on this list until it ran out of tokens
+        product_notes=(
+            Annotated[list[product_note], Field(max_length=len(product_ids))] if product_ids else none_allowed,
+            ...,
+        ),
         question_feedback=(str, ...),
         next_steps=(Annotated[list[str], Field(min_length=1, max_length=3)], ...),
     )
@@ -220,7 +224,9 @@ def summary_needs(llm: LLM, client: Client, summary: str) -> list[str]:
     return sorted(set(labels.need_ids))
 
 
-def render(prompt: Prompt, sheet: FactSheet, transcript: list[dict], submission: Submission, note: str) -> str:
+def render(
+    prompt: Prompt, sheet: FactSheet, transcript: list[dict], submission: Submission, note: str, catalogue: list[str]
+) -> str:
     c = sheet.client
     needs = []
     for n in sheet.needs:
@@ -259,6 +265,7 @@ def render(prompt: Prompt, sheet: FactSheet, transcript: list[dict], submission:
         client=f"{c.name}, {c.age}, {c.occupation}. {c.background} Came in because: {c.stated_goal}",
         needs="\n".join(needs),
         products="\n".join(products) or "(none)",
+        catalogue=", ".join(catalogue),
         question_stats=stats,
         interview="\n".join(interview),
         submission=f"Summary: {fence(submission.summary) or '(empty)'}\nRecommendations:\n" + "\n".join(recs),
@@ -468,7 +475,14 @@ def coach(content: Content, llm: LLM, state: dict, submission: Submission, check
     draft, kept, problems, unverified, found = None, {}, [], [], []
     for attempt in range(1, MAX_DRAFTS + 1):
         fix = f"\nYour previous feedback had these problems: {'; '.join(problems)}. Fix them.\n" if problems else ""
-        system = render(prompt, sheet, state.get("transcript", []), submission, note + fix)
+        system = render(
+            prompt,
+            sheet,
+            state.get("transcript", []),
+            submission,
+            note + fix,
+            [p.name for p in content.products.values()],
+        )
         try:
             with llm_scope(node="coach", role="coach", prompt=prompt.version, attempt=attempt):
                 draft = llm.chat_json(

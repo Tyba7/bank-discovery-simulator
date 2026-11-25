@@ -277,3 +277,11 @@ def test_a_next_step_citing_a_turn_that_does_not_exist_is_dropped(model):
     drafts += [{**GOOD, "next_steps": steps}] * 2
     feedback = coach(load_content(), llm, STATE, SUBMISSION)
     assert feedback.next_steps == [steps[0], steps[2]]
+
+
+def test_the_coach_sees_the_whole_catalogue(model):
+    llm, drafts, prompts = model
+    drafts.append(GOOD)
+    coach(load_content(), llm, STATE, SUBMISSION)
+    offered = prompts[0].split("name only one the bank offers:")[1].split("\n")[0]
+    assert "Education Savings Plan" in offered and "Global Transfer Account" in offered  # not Khalid's products

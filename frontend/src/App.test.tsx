@@ -257,7 +257,7 @@ describe("feedback", () => {
     ).toBeInTheDocument();
     expect(
       within(area("What was missed")).getByText(
-        "Turn 4: you proposed Equity growth fund",
+        "Turn 4: you proposed Equity Growth Fund",
       ),
     ).toBeInTheDocument();
   });

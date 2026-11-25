@@ -141,7 +141,7 @@ Tested on macOS; Windows uses the same steps but has not been tested yet.
 
    <img src="docs/images/4-feedback.jpg" width="620" alt="Feedback, top: the client's hidden needs marked Uncovered or Missed, then What went well with quotes from the interview">
 
-   <img src="docs/images/5-feedback-improve.jpg" width="620" alt="Feedback, lower: What was missed with a tested question to ask, then How to improve with question technique, summary feedback and next steps">
+   <img src="docs/images/5-feedback-improve.jpg" width="620" alt="Feedback, lower: What was missed with a tested question to ask and the unsuitable product proposed at turn 4, then How to improve">
 
 `start.py` was tested in a fresh copy of the project on macOS (setup, settings and start); it uses only Python's
 standard library and the same `npm` and `uv` commands on every system, but was not run on a Windows machine.
@@ -151,9 +151,13 @@ standard library and the same `npm` and `uv` commands on every system, but was n
   provider or a local model, follow [Quick start](#quick-start).
 - OpenAI's newer reasoning models (GPT-5 and later) reject the fixed temperature the classifier and guard use; choose
   one that accepts it, such as `gpt-4.1-mini` or `gpt-4o-mini`.
-- `gpt-4.1-mini` was checked on the classifier only (198 of 225 development cases, one run, through an
-  OpenAI-compatible router): 0.92 correct, every clearly relevant question right; 14 of 15 misses were over-unlocks on
-  nearby questions. Client, guard and coach not evaluated on it; the tested setup is in [Models tested](#models-tested).
+- `gpt-4.1-mini` was checked through an OpenAI-compatible router, one run each:
+  - classifier (198 of 225 development cases): 0.92 correct, every clearly relevant question right; 14 of 15 misses
+    were over-unlocks on nearby questions;
+  - coach (7 cases, 25 Nov): every draft passed the code checks first time, product notes agreed with the rules'
+    verdicts (judged by the same model), coach p50 11 s, $0.015 for the suite.
+
+  Client and guard are not evaluated on it; the tested setup is in [Models tested](#models-tested).
 
 ## Quick start
 

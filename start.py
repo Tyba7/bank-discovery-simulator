@@ -73,7 +73,9 @@ def build_frontend(npm: str) -> None:
     lock, installed, built = front / "package-lock.json", front / "node_modules" / ".package-lock.json", front / "dist"
     if not installed.exists() or lock.stat().st_mtime > installed.stat().st_mtime:
         print("Installing the web interface's packages (first run, a minute or two)...", flush=True)
-        subprocess.run([npm, "--prefix", "frontend", "ci", "--no-audit", "--no-fund"], cwd=ROOT, check=True)
+        subprocess.run(
+            [npm, "--prefix", "frontend", "ci", "--no-audit", "--no-fund", "--loglevel=error"], cwd=ROOT, check=True
+        )
     sources = newest(front / "src", front / "index.html", front / "vite.config.ts", lock)
     if not (built / "index.html").exists() or sources > newest(built / "index.html"):
         print("Building the web interface...", flush=True)
