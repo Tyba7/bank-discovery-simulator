@@ -121,6 +121,7 @@ It asks for two things: your **OpenAI API key** and the **model** (press Enter f
 preset: it saves the settings, installs and builds the web interface, and starts the app. When you see
 `Application startup complete`, open <http://localhost:8000>. Press Ctrl+C to stop; run `uv run start.py` again to
 restart (it will not ask again). No Git? Download the ZIP from the green **Code** button instead of `git clone`.
+Tested on macOS; Windows uses the same steps but has not been tested yet.
 
 **Using the app**
 

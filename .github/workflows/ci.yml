@@ -20,8 +20,8 @@ jobs:
         run: cp backend/.env.example backend/.env
       - name: Lint
         run: |
-          uv --directory backend run ruff check .
-          uv --directory backend run ruff format --check .
+          uv --directory backend run ruff check . ../start.py
+          uv --directory backend run ruff format --check . ../start.py
       - name: Tests
         run: uv --directory backend run pytest -m "not llm" -q
 
